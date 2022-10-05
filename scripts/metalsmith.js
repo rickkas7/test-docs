@@ -105,85 +105,12 @@ exports.metalsmith = function () {
     ]))
     .use(buildZip({
         dirs: [
-          'assets/files/app-notes/',
           'assets/files/projects/',
         ]
     }))
-    .use(msIf(
-      environment === 'development',
-      trackerSchema({
-        dir: '../src/assets/files/tracker/',
-        officialSchema: 'tracker-edge.json',     // This is the source of the generated files
-        defaultSchema: 'default-schema.json',    // This is generated
-        fragments: [
-          'engine-schema',
-          'test-schema'
-        ]
-    })))
-    .use(msIf(
-      environment === 'development',
-      trackerEdge({
-        sourceDir: '../src',
-        trackerDir: 'assets/files/tracker',
-        jsonFile: 'trackerEdgeVersions.json'
-      })))
-    .use(msIf(
-      environment === 'development',
-      systemVersion({
-      })))
-    .use(msIf(
-        environment === 'development',
-        function(files, metalsmith, done) {
-        carriersUpdate.doUpdate(__dirname, files);
-        done();
-      }))
-    .use(msIf(
-        environment === 'development',
-        function(files, metalsmith, done) {
-            pinmapDiagram.metalsmith(files, metalsmith, done, {
-              topDir: path.normalize(path.join(__dirname, '..')),
-              pinInfo: path.normalize(path.join(__dirname, '..', 'src', 'assets', 'files', 'pinInfo.json')),
-            });
-        }))
-    .use(troubleshooting({
-        sourceDir: '../src',
-        jsonFile: 'assets/files/troubleshooting.json',
-        redirectsFile: '../config/redirects.json',
-        ticketFormsFile: 'assets/files/ticketForms.json',
-        pagesCsv: '../config/troubleshootingPages.csv',
-      }))
         // Minify CSS
     .use(cleanCSS({
       files: '**/*.css'
-    }))
-    // Auto-generate documentation from the API using comments formatted in the apidoc format
-    .use(
-      apidoc({
-        destFile: 'content/reference/cloud-apis/api.md',
-        apis: [
-          {
-            src: '../../api-service/',
-            config: '../../api-service/',
-            includeFilters: ['.*[vV]iews[^.]*\\.js$', 'lib/AccessTokenController.js']
-          },
-          {
-            src: '../../api-service-libraries/',
-            config: '../../api-service/',
-            includeFilters: ['.*Controller\\.js$']
-          },
-        ]
-      })
-    )
-    .use(deviceRestoreInfo({
-      sourceDir: '../src',
-      inputFile: 'assets/files/deviceRestore.json'
-    }))
-    // Auto-generate documentation for the Javascript client library
-    .use(insertFragment({
-      destFile: 'content/reference/cloud-apis/javascript.md',
-      srcFile: '../../particle-api-js/docs/api.md',
-      fragment: 'GENERATED_JAVASCRIPT_DOCS',
-      preprocess: javascriptDocsPreprocess,
     }))
     // Make all files in this directory available to any Handlebar template
     // Use partials like this: {{> arrows}}
@@ -225,24 +152,6 @@ exports.metalsmith = function () {
     .use(helpers({
       directory: '../templates/helpers'
     }))
-    .use(planLimits({
-      config: '../src/assets/files/environment.json'
-    }))
-    .use(deviceOsApi({
-      contentDir: '../src/content',
-      sources: [
-        'reference/device-os/firmware.md'
-      ],
-      outputDir: 'reference/device-os/api',
-      cardMapping: '../config/card_mapping.json',
-      redirects: '../config/redirects.json'
-    }))
-    .use(libraries({
-      sourceDir: '../src/assets/files/libraries',
-      searchIndex: '../build/assets/files/librarySearch.json',
-      contentDir: '../src/content',
-      redirects: '../config/redirects.json'
-    }))
     .use(navMenuGenerator({      
       contentDir: '../src/content',
     }))
@@ -270,7 +179,6 @@ exports.metalsmith = function () {
       contentDir: '../src/content',
       config: '../config/sitemap.json',
       output: '../build/sitemap.xml',
-      troubleshooting: '../src/assets/files/troubleshooting.json',
       baseUrl: 'https://docs.particle.io/'
     }))
     // Create HTML pages with meta http-equiv='refresh' redirects

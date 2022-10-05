@@ -66,6 +66,7 @@ $(document).ready(function() {
     }
 
     const checkLogin = async function() {
+        /*
         const cookie = Cookies.get('ember_simple_auth_session');
         if (cookie) {
             try {
@@ -77,6 +78,7 @@ $(document).ready(function() {
             catch(e) {
             }
         }
+        */
         if (!auth) {
             const testLoginString = localStorage.getItem('apiHelperTestLogin');
             if (testLoginString) {

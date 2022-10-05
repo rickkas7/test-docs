@@ -30,8 +30,7 @@
     {
       "title": "Device Setup",
       "dir": "setup",
-      "href": "/tools/setup/",
-      "hidden": true
+      "href": "/tools/setup/"
     },
     {
       "dir": "developer-tools",
@@ -92,8 +91,7 @@
       },
       {
         "title": "Device Restore USB (Old Version)",
-        "href": "/tools/device-restore/device-restore-usb-old/",
-        "hidden": true
+        "href": "/tools/device-restore/device-restore-usb-old/"
       }
     ]
   ]

@@ -1,32 +1,8 @@
 {
     "items":[
         {
-            "title": "Getting Started",
-            "href": "/getting-started/"
-        },
-        {
-            "title": "Reference",
-            "href": "/reference/"
-        },
-        {
-            "title": "Hardware",
-            "href": "/hardware/"
-        },
-        {
-            "title": "Firmware",
-            "href": "/firmware/"
-        },
-        {
-            "title": "Scaling",
-            "href": "/scaling/"
-        },
-        {
             "title": "Tools",
             "href": "/tools/"
-        },
-        {
-            "title": "Support & Troubleshooting",
-            "href": "/troubleshooting/"
         }
     ]
 }
