@@ -1652,6 +1652,17 @@ $(document).ready(function() {
 
         const fieldSelectorElem = $(thisPartial).find('.apiHelperFieldSelector');
 
+        const deviceTableFiltersElem = $(thisPartial).find('.deviceTableFilters');
+        const deviceTableFiltersListElem = $(thisPartial).find('.deviceTableFiltersList');
+        const deviceTableFilterTemplateElem = $(thisPartial).find('.deviceTableFilterTemplate');
+        const deviceTableFilterSandboxOnlyElem = $(thisPartial).find('.deviceTableFilterSandboxOnly');
+        const deviceTableFilterProductOnlyElem = $(thisPartial).find('.deviceTableFilterProductOnly');
+
+        
+
+        // const Elem = $(thisPartial).find('.');
+
+
         if (!apiHelper.auth) {
             // Not logged in
             $(thisPartial).hide();
@@ -1659,6 +1670,7 @@ $(document).ready(function() {
         }
 
         let deviceList;
+        let filterList;
 
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams) {
@@ -1793,7 +1805,58 @@ $(document).ready(function() {
             return tableData;
         } 
 
-        const refreshTable = function(configObj) {            
+        const addNewFilter = function() {
+            let filterObj = {};
+
+            filterObj.elem = $(deviceTableFilterTemplateElem)[0].cloneNode(true);
+            $(deviceTableFiltersListElem).append(filterObj.elem);
+            $(filterObj.elem).show();
+
+            filterObj.kindElem = $(filterObj.elem).find('.deviceTableFilterKind')
+
+            $(filterObj.kindElem).on('change', function() {
+                const newValue = $(filterObj.kindElem).val();
+                if (newValue == 'add') {
+                    // Add a new element
+                    addNewFilter();
+
+                    // Restore original value
+                    $(filterObj.kindElem).val(filterObj.kind);
+                }
+                filterObj.kind = newValue;
+            });
+            filterObj.kind = $(filterObj.kindElem).val();
+
+            filterList.push(filterObj);
+
+            /*
+            const deviceTableFilterKindElem = $(thisPartial).find('.deviceTableFilterKind');
+            const deviceTableFilterByPlatformElem = $(thisPartial).find('.deviceTableFilterByPlatform');
+            const deviceTableFilterPlatformSelectElem = $(thisPartial).find('.deviceTableFilterPlatformSelect');
+            const deviceTableFilterNameElem = $(thisPartial).find('.deviceTableFilterName');
+            const deviceTableFilterNameInputElem = $(thisPartial).find('.deviceTableFilterNameInput');
+            const deviceTableFilterByDateElem = $(thisPartial).find('.deviceTableFilterByDate');
+            const deviceTableFilterDateInputElem = $(thisPartial).find('.deviceTableFilterDateInput');
+            const deviceTableFilterByUserElem = $(thisPartial).find('.deviceTableFilterByUser');
+            */
+            
+        };
+
+        const updateFilters = function(options) {
+            if (typeof filterList == 'undefined') {
+                $(deviceTableFiltersElem).show();
+
+                // First time updating the filter list. Populate with an empty filter
+                filterList = [];
+                addNewFilter();
+            }
+
+
+            
+        };
+
+        const refreshTable = function(configObj) {   
+            
             // 
             const tableData = getTableData(configObj, getOptions());
 
@@ -1863,6 +1926,8 @@ $(document).ready(function() {
                 stats.count = deviceList.length;
 
                 setStatus('Device list retrieved!');
+
+                updateFilters(options);
 
                 refreshTable($(fieldSelectorElem).data('getConfigObj')());
 
