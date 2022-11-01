@@ -188,61 +188,78 @@
                 </table>      
             </div>
         </div>
-        <div class="deviceTableFilters" style="display:none">
-
-            <div class="deviceTableFiltersList">
-            </div>
-            <div class="deviceTableFilterTemplate" style="display:none; padding: 15px 0px 10px 0px;">
-                <table class="apiHelperTableNoMargin">
-                    <tbody>
-                        <tr>
-                            <td class="apiHelperProductSelectorLabel">Select devices</td>
-                            <td>
-                                <select class="deviceTableFilterKind apiHelperSelect">
-                                    <option value="add" selected>Add a new filter</option>
-                                    <option value="delete" disabled>Remove this filter</option>
-                                    <option value="byPlatform" class="deviceTableFilterSandboxOnly">that are platform</option>
-                                    <option value="byCellular" class="deviceTableFilterSandboxOnly">that are cellular devices</option>
-                                    <option value="byWiFi" class="deviceTableFilterSandboxOnly">that are Wi-Fi devices</option>
-                                    <option value="byProduct" class="deviceTableFilterSandboxOnly">that are product devices claimed to me</option>
-                                    <option value="byNotProduct" class="deviceTableFilterSandboxOnly">that are not product devices</option>
-                                    <option value="byGroup">belonging to the device group</option>
-                                    <option value="byName">with a name matching the pattern</option>
-                                    <option value="byLastConnectedBefore">with last connected before</option>
-                                    <option value="byLastConnectedAfter">with last connected after</option>
-                                    <option value="byFirstConnectedBefore">with first connected before</option>
-                                    <option value="byFirstConnectedAfter">with first connected after</option>
-                                    <option value="byClaimedUser" class="deviceTableFilterProductOnly">that are claimed to user</option>
-                                    <option value="byClaimed" class="deviceTableFilterProductOnly">that are claimed to any user</option>
-                                    <option value="byNotClaimed" class="deviceTableFilterProductOnly">that are not claimed to any user</option>
-                                    <option value="byClaimedCustomer" class="deviceTableFilterProductOnly">that are claimed to a customer</option>
-                                </select>
+        <div class="deviceTableFilters" style="display:none; padding: 15px 0px 15px 0px">
+            <div><label><input type="checkbox" class="deviceTableFiltersCheckbox" />Filter device list</label></div>
+            <table class="apiHelperTableNoMargin deviceTableFiltersTable" style="display:none;">
+                <tbody>
+                    <tr class="deviceTableFilterSandboxOnly">
+                        <td><label><input type="checkbox" class="deviceTableFilterByPlatform"/>Select devices that are platform </label>
+                            <select class="deviceTableFilterPlatformSelect apiHelperSelect"></select></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr class="deviceTableFilterSandboxOnly">
+                        <td><label><input type="checkbox" class="deviceTableFilterCellular"/>Select devices that are cellular devices </label></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr class="deviceTableFilterSandboxOnly">
+                        <td><label><input type="checkbox" class="deviceTableFilterWiFi"/>Select devices that are Wi-Fi devices </label></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr class="deviceTableFilterSandboxOnly">
+                        <td><label><input type="checkbox" class="deviceTableFilterMyProductDevices"/>Select devices that are product devices claimed to me</label></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr class="deviceTableFilterSandboxOnly">
+                        <td><label><input type="checkbox" class="deviceTableFilterMyNonProductDevices"/>Select devices that are not product devices</label></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr class="deviceTableFilterProductOnly">
+                        <td><label><input type="checkbox" class="deviceTableFilterClaimedToUser"/>Select devices that are claimed to user</label>
+                            <select class="deviceTableFilterUserSelect apiHelperSelect"></select></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr class="deviceTableFilterProductOnly">
+                        <td><label><input type="checkbox" class="deviceTableFilterClaimedAnyUser"/>Select devices that are claimed to any user</label></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr class="deviceTableFilterProductOnly">
+                        <td><label><input type="checkbox" class="deviceTableFilterUnclaimed"/>Select devices that are unclaimed</label></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr class="deviceTableFilterProductOnly">
+                        <td><label><input type="checkbox" class="deviceTableFilterUnclaimed"/>Select devices that are claimed to any customer</label></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr>
+                        <td><label><input type="checkbox" class="deviceTableFilterByPlatform"/>Select devices that belong to a device group </label>
                             </td>
-                            <td>&nbsp;</td>
-                        </tr>
-                        <tr class="deviceTableFilterByPlatform" style="display:none">
-                            <td>Platform</td>
-                            <td><select class="deviceTableFilterPlatformSelect"></select></td>
-                            <td>&nbsp;</td>
-                        </tr>
-                        <tr class="deviceTableFilterName" style="display:none">
-                            <td>Device name</td>
-                            <td><input type="text" class="deviceTableFilterNameInput" /></td>
-                            <td>&nbsp;</td>
-                        </tr>
-                        <tr class="deviceTableFilterByDate" style="display:none">
-                            <td>Date</td>
-                            <td><input type="text" class="deviceTableFilterDateInput" /></td>
-                            <td>&nbsp;</td>
-                        </tr>
-                        <tr class="deviceTableFilterByUser" style="display:none">
-                            <td>Claimed to user</td>
-                            <td><input type="text" class="deviceTableFilterUserInput" /></td>
-                            <td>&nbsp;</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr>
+                        <td><label><input type="checkbox" class="deviceTableFilterByName"/>Select devices with a name matching pattern </label>
+                            <input type="text" /></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr>
+                        <td><label><input type="checkbox" class="deviceTableFilterByFirstConnection"/>Select devices with first connection </label>
+                            <select class="apiHelperSelect">
+                                <option selected>before</option>
+                                <option>after</option>
+                            </select>
+                            <input type="text" /></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                    <tr>
+                        <td><label><input type="checkbox" class="deviceTableFilterByLastConnection"/>Select devices with last connection </label>
+                            <select class="apiHelperSelect">
+                                <option selected>before</option>
+                                <option>after</option>
+                            </select>
+                            <input type="text" /></td>
+                        <td>&nbsp;</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
         <div class="deviceTableDiv" style="display:none">
             <div>Selected devices:</div>

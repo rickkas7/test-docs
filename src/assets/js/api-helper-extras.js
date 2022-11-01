@@ -1653,8 +1653,10 @@ $(document).ready(function() {
         const fieldSelectorElem = $(thisPartial).find('.apiHelperFieldSelector');
 
         const deviceTableFiltersElem = $(thisPartial).find('.deviceTableFilters');
-        const deviceTableFiltersListElem = $(thisPartial).find('.deviceTableFiltersList');
-        const deviceTableFilterTemplateElem = $(thisPartial).find('.deviceTableFilterTemplate');
+        const deviceTableFiltersCheckboxElem = $(thisPartial).find('.deviceTableFiltersCheckbox');
+        const deviceTableFiltersTableElem = $(thisPartial).find('.deviceTableFiltersTable');
+
+        
         const deviceTableFilterSandboxOnlyElem = $(thisPartial).find('.deviceTableFilterSandboxOnly');
         const deviceTableFilterProductOnlyElem = $(thisPartial).find('.deviceTableFilterProductOnly');
 
@@ -1673,21 +1675,7 @@ $(document).ready(function() {
         let filterList;
 
         const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams) {
-            const formatParam = urlParams.get('format');
-            if (formatParam) {
-                $(formatSelectElem).val(formatParam);
-            }
-            const headerParam = urlParams.get('header');
-            if (headerParam !== null) {
-                $(includeHeaderCheckboxElem).prop('checked', !!headerParam);
-            }
-            const dateFormatParam = urlParams.get('dateFormat');
-            if (dateFormatParam) {
-                $(dateFormatSelectElem).val(dateFormatParam);
-            }
 
-        }
 
         const setStatus = function(s) {
             $(statusElem).text(s);
@@ -1695,7 +1683,12 @@ $(document).ready(function() {
 
         const getOptions = function() {
             
-            let options = $(productOrSandboxSelectorElem).data('getOptions')();
+            const getOptionsFn = $(productOrSandboxSelectorElem).data('getOptions');
+            if (!getOptionsFn) {
+                return;
+            }
+
+            let options = $(productOrSandboxSelectorElem).data('getOptions')(getOptionsFn);
 
             options.format = $(formatSelectElem).val();
             options.header = $(includeHeaderCheckboxElem).prop('checked');
@@ -1725,7 +1718,9 @@ $(document).ready(function() {
                 urlConfig.format = options.format;
                 urlConfig.header = options.header;
                 urlConfig.dateFormat = options.dateFormat;
-                
+
+                urlConfig.filters = $(deviceTableFiltersCheckboxElem).prop('checked');
+     
                 const searchStr = $.param(urlConfig);
     
                 history.pushState(null, '', '?' + searchStr);     
@@ -1805,58 +1800,44 @@ $(document).ready(function() {
             return tableData;
         } 
 
-        const addNewFilter = function() {
-            let filterObj = {};
-
-            filterObj.elem = $(deviceTableFilterTemplateElem)[0].cloneNode(true);
-            $(deviceTableFiltersListElem).append(filterObj.elem);
-            $(filterObj.elem).show();
-
-            filterObj.kindElem = $(filterObj.elem).find('.deviceTableFilterKind')
-
-            $(filterObj.kindElem).on('change', function() {
-                const newValue = $(filterObj.kindElem).val();
-                if (newValue == 'add') {
-                    // Add a new element
-                    addNewFilter();
-
-                    // Restore original value
-                    $(filterObj.kindElem).val(filterObj.kind);
-                }
-                filterObj.kind = newValue;
-            });
-            filterObj.kind = $(filterObj.kindElem).val();
-
-            filterList.push(filterObj);
-
-            /*
-            const deviceTableFilterKindElem = $(thisPartial).find('.deviceTableFilterKind');
-            const deviceTableFilterByPlatformElem = $(thisPartial).find('.deviceTableFilterByPlatform');
-            const deviceTableFilterPlatformSelectElem = $(thisPartial).find('.deviceTableFilterPlatformSelect');
-            const deviceTableFilterNameElem = $(thisPartial).find('.deviceTableFilterName');
-            const deviceTableFilterNameInputElem = $(thisPartial).find('.deviceTableFilterNameInput');
-            const deviceTableFilterByDateElem = $(thisPartial).find('.deviceTableFilterByDate');
-            const deviceTableFilterDateInputElem = $(thisPartial).find('.deviceTableFilterDateInput');
-            const deviceTableFilterByUserElem = $(thisPartial).find('.deviceTableFilterByUser');
-            */
-            
-        };
 
         const updateFilters = function(options) {
-            if (typeof filterList == 'undefined') {
-                $(deviceTableFiltersElem).show();
-
-                // First time updating the filter list. Populate with an empty filter
-                filterList = [];
-                addNewFilter();
+            if (!options) {
+                options = getOptions();
+                if (!options) {
+                    return;
+                }
             }
 
+            const filtersEnabled = $(deviceTableFiltersCheckboxElem).prop('checked');
+            if (filtersEnabled) {
+                $(deviceTableFiltersTableElem).show();
+            }
+            else {
+                $(deviceTableFiltersTableElem).hide();
+            }
 
-            
+            if (options.productId) {
+                $(deviceTableFilterSandboxOnlyElem).hide();
+                $(deviceTableFilterProductOnlyElem).show();
+            }
+            else {
+                $(deviceTableFilterSandboxOnlyElem).show();
+                $(deviceTableFilterProductOnlyElem).hide();
+            }
+
         };
 
+        $(deviceTableFiltersCheckboxElem).on('click', function() {
+            updateFilters();
+            updateSearchParam();
+        });
+
+
         const refreshTable = function(configObj) {   
-            
+
+            const filtersEnabled = $(deviceTableFiltersCheckboxElem).prop('checked');
+
             // 
             const tableData = getTableData(configObj, getOptions());
 
@@ -1927,6 +1908,7 @@ $(document).ready(function() {
 
                 setStatus('Device list retrieved!');
 
+                $(deviceTableFiltersElem).show();
                 updateFilters(options);
 
                 refreshTable($(fieldSelectorElem).data('getConfigObj')());
@@ -2092,6 +2074,25 @@ $(document).ready(function() {
             getXlsxData({toClipboard: true});
             
         });
+
+        if (urlParams) {
+            const formatParam = urlParams.get('format');
+            if (formatParam) {
+                $(formatSelectElem).val(formatParam);
+            }
+            const headerParam = urlParams.get('header');
+            if (headerParam !== null) {
+                $(includeHeaderCheckboxElem).prop('checked', !!headerParam);
+            }
+            const dateFormatParam = urlParams.get('dateFormat');
+            if (dateFormatParam) {
+                $(dateFormatSelectElem).val(dateFormatParam);
+            }
+            const filters = urlParams.get('filters');
+            $(deviceTableFiltersCheckboxElem).prop('checked', !!filters);
+
+            updateFilters();
+        }
 
 
     });
