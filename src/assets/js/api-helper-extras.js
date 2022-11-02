@@ -1655,6 +1655,7 @@ $(document).ready(function() {
         const deviceTableFiltersElem = $(thisPartial).find('.deviceTableFilters');
         const deviceTableFiltersCheckboxElem = $(thisPartial).find('.deviceTableFiltersCheckbox');
         const deviceTableFiltersTableElem = $(thisPartial).find('.deviceTableFiltersTable');
+        const deviceTableFilterPlatformSelectElem = $(thisPartial).find('.deviceTableFilterPlatformSelect');
 
         
         const deviceTableFilterSandboxOnlyElem = $(thisPartial).find('.deviceTableFilterSandboxOnly');
@@ -1676,7 +1677,6 @@ $(document).ready(function() {
 
         const urlParams = new URLSearchParams(window.location.search);
 
-
         const setStatus = function(s) {
             $(statusElem).text(s);
         }
@@ -1696,6 +1696,32 @@ $(document).ready(function() {
 
             options.username = apiHelper.auth.username;
             options.accessToken = apiHelper.auth.access_token;
+
+            // Filters
+            if ($(deviceTableFiltersCheckboxElem).prop('checked')) {
+                $(deviceTableFiltersTableElem).find('tbody > tr').each(function() {
+                    const rowElem = $(this);
+                    
+                    const firstColElem = $(rowElem).find('td').first();
+
+                    const enableCheckboxElem = $(firstColElem).find('input[type=checkbox]').first();
+                    if ($(enableCheckboxElem).prop('checked')) {
+                        const filterKind = $(enableCheckboxElem).data('filter');
+
+                        let filterValue = 1;
+                        switch(filterKind) {
+                            case 'platform':
+                                filterValue = $(deviceTableFilterPlatformSelectElem).val();
+                                break;
+                        }
+                        options[filterKind] = filterValue;
+                    }
+                });
+
+            }
+            
+            console.log('options', options);
+
 
             return options;
         }
@@ -1732,7 +1758,7 @@ $(document).ready(function() {
             }
         };
 
-        const getTableData = function(configObj, options) {
+        const getTableData =  async function(configObj, options) {
 
             let tableData = {
                 keys:[],
@@ -1761,6 +1787,7 @@ $(document).ready(function() {
 
             if (deviceList) {
                 tableData.data = [];
+                tableData.platforms = [];
 
                 for(const deviceInfo of deviceList) {
                     let d = {};
@@ -1769,7 +1796,21 @@ $(document).ready(function() {
                         continue;
                     }
 
+                    const platformName = await apiHelper.getPlatformName(deviceInfo.platform_id);
+                    if (!tableData.platforms.includes(platformName)) {
+                        tableData.platforms.push(platformName);
+                    }
+                    
+                    if (options.platform && platformName != options.platform) {
+                        continue;
+                    }
+                            
+
                     for(const key of tableData.keys) {
+                        if (key == 'platform_name') {
+                            d[key] = platformName;
+                        }
+                        else
                         if (typeof deviceInfo[key] !== 'undefined') {
                             if (Array.isArray(deviceInfo[key])) {
                                 // Occurs for groups and functions
@@ -1794,7 +1835,21 @@ $(document).ready(function() {
                 }    
             }
 
+            tableData.platforms.sort(apiHelper.platformNameSort);
+            let oldPlatform = $(deviceTableFilterPlatformSelectElem).val();
+            $(deviceTableFilterPlatformSelectElem).empty();
+            for(const p of tableData.platforms) {
+                const optionElem = document.createElement('option');
+                $(optionElem).attr('value', p);
+                $(optionElem).text(p);
+                $(deviceTableFilterPlatformSelectElem).append(optionElem);
+            }
+            if (oldPlatform) {
+                $(deviceTableFilterPlatformSelectElem).val(oldPlatform);
+            }
+
             // TODO: Filtering of desired rows
+
             // TODO: Date formatting
 
             return tableData;
@@ -1833,13 +1888,46 @@ $(document).ready(function() {
             updateSearchParam();
         });
 
+        let filterElem = {};
 
-        const refreshTable = function(configObj) {   
+        $(deviceTableFiltersTableElem).find('tbody > tr').each(function() {
+            const rowElem = $(this);
+            
+            const firstColElem = $(rowElem).find('td').first();
+
+            const enableCheckboxElem = $(firstColElem).find('input[type=checkbox]').first();
+
+            const filterKey = $(enableCheckboxElem).data('filter');
+            filterElem[filterKey] = {
+                checkboxElem: enableCheckboxElem,
+            };
+
+            $(enableCheckboxElem).on('click', async function() {
+                updateFilters();
+                await refreshTable($(fieldSelectorElem).data('getConfigObj')());
+                updateSearchParam();    
+            });
+
+            switch(filterKey) {
+                case 'platform':
+                    break;
+            }
+        });
+
+        $(deviceTableFilterPlatformSelectElem).on('change', async function() {
+            filterElem.platform.checkboxElem.prop('checked', true);
+            updateFilters();
+            await refreshTable($(fieldSelectorElem).data('getConfigObj')());
+            updateSearchParam();    
+        });
+
+
+        const refreshTable = async function(configObj) {   
 
             const filtersEnabled = $(deviceTableFiltersCheckboxElem).prop('checked');
 
             // 
-            const tableData = getTableData(configObj, getOptions());
+            const tableData = await getTableData(configObj, getOptions());
 
             $(deviceTableHeadElem).html('');
             {
@@ -1911,7 +1999,7 @@ $(document).ready(function() {
                 $(deviceTableFiltersElem).show();
                 updateFilters(options);
 
-                refreshTable($(fieldSelectorElem).data('getConfigObj')());
+                await refreshTable($(fieldSelectorElem).data('getConfigObj')());
 
                 ga('send', 'event', gaCategory, 'Get Devices Success', JSON.stringify(stats));
             }
@@ -1937,7 +2025,7 @@ $(document).ready(function() {
         });
 
         $(thisPartial).on('fieldSelectorUpdate', async function(event, config) {
-            refreshTable(config);
+            await refreshTable(config);
             updateSearchParam();
         });
 
@@ -1953,7 +2041,7 @@ $(document).ready(function() {
             updateSearchParam();
         });
 
-        const getXlsxData = function(options) {
+        const getXlsxData = async function(options) {
             if (!options) {
                 options = {};
             }
@@ -1971,7 +2059,7 @@ $(document).ready(function() {
             getTableDataOptions.convertDates = (xlsxData.options.dateFormat != 'iso');
             getTableDataOptions.export = true;
 
-            xlsxData.tableData = getTableData(xlsxData.configObj, getTableDataOptions);
+            xlsxData.tableData = await getTableData(xlsxData.configObj, getTableDataOptions);
 
             let conversionOptions = {
                 header: xlsxData.tableData.keys
@@ -2065,13 +2153,13 @@ $(document).ready(function() {
             return xlsxData;
         }
 
-        $(downloadButtonElem).on('click', function() {
-            getXlsxData({toFile: true});
+        $(downloadButtonElem).on('click', async function() {
+            await getXlsxData({toFile: true});
 
         });
 
-        $(copyButtonElem).on('click', function() {
-            getXlsxData({toClipboard: true});
+        $(copyButtonElem).on('click', async function() {
+            await getXlsxData({toClipboard: true});
             
         });
 
@@ -2093,7 +2181,6 @@ $(document).ready(function() {
 
             updateFilters();
         }
-
 
     });
 
