@@ -1673,7 +1673,7 @@ $(document).ready(function() {
         }
 
         let deviceList;
-        let filterList;
+        let filterElem = {};
 
         const urlParams = new URLSearchParams(window.location.search);
 
@@ -1746,7 +1746,14 @@ $(document).ready(function() {
                 urlConfig.dateFormat = options.dateFormat;
 
                 urlConfig.filters = $(deviceTableFiltersCheckboxElem).prop('checked');
-     
+                if (urlConfig.filters) {
+                    for(const filterKey in filterElem) {
+                        if (options[filterKey]) {
+                            urlConfig[filterKey] = options[filterKey];
+                        }
+                    }
+                }
+
                 const searchStr = $.param(urlConfig);
     
                 history.pushState(null, '', '?' + searchStr);     
@@ -1796,21 +1803,19 @@ $(document).ready(function() {
                         continue;
                     }
 
-                    const platformName = await apiHelper.getPlatformName(deviceInfo.platform_id);
-                    if (!tableData.platforms.includes(platformName)) {
-                        tableData.platforms.push(platformName);
+                    d.platform_name = await apiHelper.getPlatformName(deviceInfo.platform_id);
+                    if (!tableData.platforms.includes(d.platform_name)) {
+                        tableData.platforms.push(d.platform_name);
                     }
-                    
+
+                    /*
                     if (options.platform && platformName != options.platform) {
                         continue;
                     }
+                    */
                             
 
                     for(const key of tableData.keys) {
-                        if (key == 'platform_name') {
-                            d[key] = platformName;
-                        }
-                        else
                         if (typeof deviceInfo[key] !== 'undefined') {
                             if (Array.isArray(deviceInfo[key])) {
                                 // Occurs for groups and functions
@@ -1888,7 +1893,6 @@ $(document).ready(function() {
             updateSearchParam();
         });
 
-        let filterElem = {};
 
         $(deviceTableFiltersTableElem).find('tbody > tr').each(function() {
             const rowElem = $(this);
@@ -2176,8 +2180,21 @@ $(document).ready(function() {
             if (dateFormatParam) {
                 $(dateFormatSelectElem).val(dateFormatParam);
             }
-            const filters = urlParams.get('filters');
-            $(deviceTableFiltersCheckboxElem).prop('checked', !!filters);
+            const hasFilters = !!urlParams.get('filters');
+            $(deviceTableFiltersCheckboxElem).prop('checked', hasFilters);
+            if (hasFilters) {
+                for(const filterKey in filterElem) {
+                    const filterValue = urlParams.get(filterKey)
+                    if (filterValue) {
+                        console.log('load filterKey=' + filterKey + ' filterValue=' + filterValue); 
+                        $(filterElem[filterKey].checkboxElem).prop('checked', true);
+                    }
+                }
+                if (filterKey == 'platform') {
+
+                }
+            }
+
 
             updateFilters();
         }
