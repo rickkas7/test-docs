@@ -404,6 +404,84 @@ const generatorConfig = require('./generator-config');
 
     };
 
+    updater.generateCountryComparison = function(options) {
+        // models: array of objects: title, modem, sim
+        let tableOptions = {
+            columns: [
+                {
+                    key: 'country',
+                    title: 'Country',
+                },
+            ],
+        };
+        for(let ii = 0; ii < options.models.length; ii++) {
+            tableOptions.columns.push({
+                key: ii.toString(),
+                title: options.models[ii].title,
+                align: 'center',
+            });
+        }
+
+        let recommendationMap = {
+            'YES': '&check;', 
+            'NS': '?',
+            'POSS': '',
+            'NRND': 'NRND',
+            'NR': '',
+        }
+
+        let tableData = [];
+
+        for(const cmsObj of updater.datastore.data.countryModemSim) {
+            for(let ii = 0; ii < options.models.length; ii++) {                
+                if (cmsObj.modem != options.models[ii].modem || cmsObj.sim != options.models[ii].sim) {
+                    continue;
+                }
+                if (cmsObj.roamingRestrictions == 'hide') {
+                    continue;
+                }
+                let countryData = tableData.find(e => e.country == cmsObj.country);
+                if (!countryData) {
+                    countryData = {
+                        country: cmsObj.country
+                    }
+                    tableData.push(countryData);
+                }
+                let recommendation;
+                if (!recommendation && options.models[ii].recommendationMap) {
+                    recommendation = options.models[ii].recommendationMap[cmsObj.recommendation];
+                }
+                if (!recommendation) {
+                    recommendation = recommendationMap[cmsObj.recommendation];
+                }
+                countryData[ii.toString()] = recommendation;
+            }    
+        }
+
+        // Remove blank rows
+        for(let row = tableData.length - 1; row >= 0; row--) {
+            let hasData = false;
+
+            for(let ii = 0; ii < options.models.length; ii++) {                
+                if (tableData[row][ii.toString()]) {
+                    hasData = true;
+                }
+            }
+            if (!hasData) {
+                tableData.splice(row, 1);
+            }
+        }
+
+        tableData.sort(function(a, b) {
+            return a.country.localeCompare(b.country);
+        });
+        
+
+        // Render
+        return updater.generateTable(tableOptions, tableData);        
+    }
+
+
     updater.generateFamilySkus = function(skuFamily, options) {
         let skus = [];
 
@@ -2147,6 +2225,13 @@ const generatorConfig = require('./generator-config');
                     align: 'center',
                 });    
             }
+            if (options.oldPinNumber) {
+                tableOptions.columns.push({
+                    key: 'oldNum',
+                    title: oldTitle + ' Pin',
+                    align: 'center',
+                });    
+            }
             tableOptions.columns.push({
                 key: 'oldPinName',
                 title: oldTitle + ' Pin Name'
@@ -2156,6 +2241,13 @@ const generatorConfig = require('./generator-config');
                 title: oldTitle + ' ' + options.label,
                 checkmark: !!options.checkmark,
             });    
+            if (options.newPinNumber) {
+                tableOptions.columns.push({
+                    key: 'newNum',
+                    title: newTitle + ' Pin',
+                    align: 'center',
+                });    
+            }
             tableOptions.columns.push({
                 key: 'newPinName',
                 title: newTitle + ' Pin Name'
@@ -2180,10 +2272,12 @@ const generatorConfig = require('./generator-config');
                         num: m.num
                     };
                     if (m.old) {
+                        rowData.oldNum = m.old.num;
                         rowData.oldPinName = getPinNameWithAlt(m.old);
                         rowData.oldPort = portColumnValue(m.old[options.port]);
                     }
                     if (m.new) {
+                        rowData.newNum = m.new.num;
                         rowData.newPinName = getPinNameWithAlt(m.new);
                         rowData.newPort = portColumnValue(m.new[options.port]);
                         rowData.newHardwareTimer = m.new.hardwareTimer;
