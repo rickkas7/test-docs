@@ -35,22 +35,28 @@ $(document).ready(function() {
         $(trElem).append(tdElem);
 
         tdElem = document.createElement('td');
-        $(tdElem).text(options.right);
+
+        if (options.rightPre) {
+            const preElem = document.createElement('pre');
+            $(preElem).addClass('apiHelperMonoSmall');
+            $(preElem).text(options.right);
+            $(tdElem).append(preElem);    
+        }
+        else {
+            $(tdElem).text(options.right);
+        }
+
         $(trElem).append(tdElem);
 
         $(options.tbodyElem).append(trElem);
     }
     const addMultipleRows = function(options) {
         for(const key of options.keys) {
-            if (options.skipKeys) {
-                if (options.skipKeys.includes(key)) {
-                    continue;
-                }   
-            }
             addTwoColumnRow({
                 left: (options.mapKey && options.mapKey[key]) ? options.mapKey[key] : key,
                 right: options.data[key],
                 tbodyElem: options.tbodyElem,
+                rightPre: true,
             })
         }
     }
@@ -71,35 +77,21 @@ $(document).ready(function() {
         let eventDataJson;
         try {
             eventDataJson = JSON.parse(options.event.data);
+            options2.event.data = JSON.stringify(eventDataJson, null, 4);
         }
         catch(e) {            
         }
 
         let addRowOptions = {
             keys: ['name', 'data', 'published_at', 'coreid'],
-            skipKeys: [],
-            data: options.event,
+            data: options2.event,
             tbodyElem,
         };
-        if (eventDataJson) {
-            addRowOptions.skipKeys.push('data');        
-        }
         addMultipleRows(addRowOptions);
 
         $(tableElem).append(tbodyElem);
 
         $(outerDivElem).append(tableElem);
-
-        if (eventDataJson) {
-            const preElem = document.createElement('pre');
-            $(preElem).attr('rows', 8);
-            $(preElem).attr('cols', 80);
-            $(preElem).addClass('apiHelperMonoSmall');
-            $(preElem).text(JSON.stringify(eventDataJson, null, 4));
-
-            $(outerDivElem).append(preElem);
-        }
-
 
         logAddBlock(options2);
     }
@@ -112,9 +104,56 @@ $(document).ready(function() {
 
         const outerDivElem = options2.content = document.createElement('div');
 
+    
+        const tableElem = document.createElement('table');
+        $(tableElem).addClass('apiHelperTableNoMargin');
+
+        const tbodyElem = document.createElement('tbody');
+
+        let addRowOptions = {
+            keys: ['method', 'headers', 'body'],
+            data: options2.hook,
+            tbodyElem,
+        };
+        addMultipleRows(addRowOptions);
+
+        $(tableElem).append(tbodyElem);
+
+        $(outerDivElem).append(tableElem);
+
         logAddBlock(options2);
+
+        // Add to server data
+        
     }
 
+    const logAddHookResponse = function(options) {
+        // options.hook .hookId, body, statusCode
+        let options2 = Object.assign({}, options);
+
+        options2.bannerText = 'Webhook Response';
+
+        const outerDivElem = options2.content = document.createElement('div');
+
+    
+        const tableElem = document.createElement('table');
+        $(tableElem).addClass('apiHelperTableNoMargin');
+
+        const tbodyElem = document.createElement('tbody');
+
+        let addRowOptions = {
+            keys: ['statusCode', 'body'],
+            data: options2.hook,
+            tbodyElem,
+        };
+        addMultipleRows(addRowOptions);
+
+        $(tableElem).append(tbodyElem);
+
+        $(outerDivElem).append(tableElem);
+
+        logAddBlock(options2);
+    }
     const sendControl = function(reqObj) {
         $.ajax({
             contentType: 'application/json',
@@ -145,7 +184,7 @@ $(document).ready(function() {
         }
 
         // Create new webhook
-        webhookName = uuid + webhookSuffix;
+        webhookName = uuid + '-' + webhookSuffix;
         
         let settings = {
             headers: {
@@ -216,6 +255,18 @@ $(document).ready(function() {
             }
         });
 
+
+        evtSource.addEventListener('hookResponse', function(event) {
+            try {
+                const hookObj = JSON.parse(event.data);
+
+                console.log('hookResponse', hookObj);
+                logAddHookResponse({hook: hookObj});    
+            }
+            catch(e) {
+                console.log('exception in hook listener', e);
+            }
+        });
 
         evtSource.onerror = function(err) {
             console.error("EventSource failed:", err);
