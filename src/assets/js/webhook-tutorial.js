@@ -8,23 +8,37 @@ $(document).ready(function() {
     const serverUrlBase = 'http://home.rickk.com:5123/';
     const webhookSuffix = 'WebhookTutorial';
 
-    let uuid;
+    let sessionId;
     let webhookId;
     let webhookName;
        
 
     const logAddBlock = function(options) {
         const blockDivElem = document.createElement('div');
+        // $(blockDivElem).css('width', '300px');
+
+        const innerBoxElem = document.createElement('div');
+        $(innerBoxElem).css('width', '350px');
 
         const bannerDivElem = document.createElement('div');
-        $(bannerDivElem).css('padding', '10px 0px 10px 0px');
         $(bannerDivElem).text(options.bannerText);
+        $(bannerDivElem).css('padding', '10px 10px 10px 10px');
+        $(bannerDivElem).css('margin-right', '2px');
+        $(bannerDivElem).css('font-size', '14px');
+        $(bannerDivElem).css('color', '#000000'); // black
+        
+        
+        if (options.bannerBackground) {
+            $(bannerDivElem).css('background-color', options.bannerBackground);
+        }
 
-        $(blockDivElem).append(bannerDivElem);
+        $(innerBoxElem).append(bannerDivElem);
 
-        $(blockDivElem).append(options.content);
+        $(innerBoxElem).append(options.content);            
+    
+        $(blockDivElem).append(innerBoxElem);
 
-        $('.webhookTutorialLog').prepend(blockDivElem);
+        $('.webhookTutorialLog').append(blockDivElem);
     }
 
     const addTwoColumnRow = function(options) {        
@@ -65,8 +79,25 @@ $(document).ready(function() {
         // options.event.name, .data, .published_at, .coreid
         let options2 = Object.assign({}, options);
 
-        options2.bannerText = 'Event';
-        
+        if (options2.event.coreid == 'api') {
+            options2.bannerText = 'Event (API)';
+            options2.bannerBackground = '#5FD898';   // COLOR_Mint_700
+        }
+        else
+        if (options2.event.coreid == 'particle-internal') {
+            options2.bannerText = 'Event (Internal)';
+            if (options2.event.name.indexOf('hook-error') >= 0) {
+                options2.bannerBackground = '#FF6F76';  // COLOR_State_Red_500 
+            }
+            else {
+                options2.bannerBackground = '#B0E5C9';  // COLOR_Mint_500 
+            }
+        }
+        else {
+            options2.event.bannerText = 'Event (Device)';
+            options2.bannerBackground = '#00E1FF';   // COLOR_ParticleBlue_500
+        }
+
         const outerDivElem = options2.content = document.createElement('div');
 
         const tableElem = document.createElement('table');
@@ -96,11 +127,40 @@ $(document).ready(function() {
         logAddBlock(options2);
     }
 
+    const logAddData = function(options) {
+        let options2 = Object.assign({}, options);
+
+        options2.bannerText = 'Parsed Data';
+        options2.bannerBackground = '#FFADBD';   // COLOR_Watermelon_400
+
+        const outerDivElem = options2.content = document.createElement('div');
+
+    
+        const tableElem = document.createElement('table');
+        $(tableElem).addClass('apiHelperTableNoMargin');
+
+        const tbodyElem = document.createElement('tbody');
+
+        let addRowOptions = {
+            keys: Object.keys(options2.data),
+            data: options2.data,
+            tbodyElem,
+        };
+        addMultipleRows(addRowOptions);
+
+        $(tableElem).append(tbodyElem);
+
+        $(outerDivElem).append(tableElem);
+
+        logAddBlock(options2);
+    }
+
     const logAddHook = function(options) {
         // options.hook .hookId, body, headers, method, originalUrl
         let options2 = Object.assign({}, options);
 
         options2.bannerText = 'Webhook Received';
+        options2.bannerBackground = '#FA6200';   // COLOR_Tangerine_600
 
         const outerDivElem = options2.content = document.createElement('div');
 
@@ -123,8 +183,18 @@ $(document).ready(function() {
 
         logAddBlock(options2);
 
-        // Add to server data
-        
+        // Add to server received data
+        try {
+            const bodyJson = JSON.parse(options2.hook.body);
+
+            const dataJson = JSON.parse(bodyJson.data);
+
+            logAddData({data:dataJson});
+        }
+        catch(e) {         
+            console.log('error parsing body', e);   
+        }
+
     }
 
     const logAddHookResponse = function(options) {
@@ -132,6 +202,7 @@ $(document).ready(function() {
         let options2 = Object.assign({}, options);
 
         options2.bannerText = 'Webhook Response';
+        options2.bannerBackground = '#FF9F61';    // COLOR_Tangerine_400
 
         const outerDivElem = options2.content = document.createElement('div');
 
@@ -154,6 +225,8 @@ $(document).ready(function() {
 
         logAddBlock(options2);
     }
+    
+
     const sendControl = function(reqObj) {
         $.ajax({
             contentType: 'application/json',
@@ -167,7 +240,7 @@ $(document).ready(function() {
             success: function (data) {
                 console.log('control success', data);
             },
-            url: serverUrlBase + 'control/' + uuid,
+            url: serverUrlBase + 'control/' + sessionId,
         });        
     }
 
@@ -184,7 +257,7 @@ $(document).ready(function() {
         }
 
         // Create new webhook
-        webhookName = uuid + '-' + webhookSuffix;
+        webhookName = sessionId + '-' + webhookSuffix;
         
         let settings = {
             headers: {
@@ -203,7 +276,7 @@ $(document).ready(function() {
             // errorResponseTopic
             // responseTemplate
             rejectUnauthorized: false,
-            url: serverUrlBase + 'hook/' + uuid
+            url: serverUrlBase + 'hook/' + sessionId
         };
         $('.webhookTutorialHookEvent').text(webhookName);
         $('.webhookTutorialHookUrl').text(settings.url);
@@ -224,7 +297,7 @@ $(document).ready(function() {
         evtSource.addEventListener('start', function(event) {
             const dataObj = JSON.parse(event.data);
 
-            uuid = dataObj.uuid;
+            sessionId = dataObj.sessionId;
 
             sendControl({test:1234});
             checkWebhooks();
@@ -233,8 +306,11 @@ $(document).ready(function() {
                 stream.on('event', function(event) {
                     try {
                         console.log('event', event);
+
                         // event.name, .data, .published_at, .coreid
-                        logAddEvent({event});    
+                        if (event.name.indexOf(sessionId) >= 0) {
+                            logAddEvent({event});    
+                        }
                     }
                     catch(e) {
                         console.log('exception in event listener', e);

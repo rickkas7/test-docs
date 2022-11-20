@@ -20,6 +20,3 @@ Webhooks provide a way for Particle devices to communicate with an external serv
 
 {{> webhook-tutorial-log}}
 
-### Received Data
-
-{{> webhook-tutorial-data}}
