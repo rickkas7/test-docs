@@ -226,21 +226,25 @@ $(document).ready(function() {
     }
     
 
-    const sendControl = function(reqObj) {
-        $.ajax({
-            contentType: 'application/json',
-            data: JSON.stringify(reqObj),
-            dataType: 'json',
-            error: function (jqXHR, textStatus, errorThrown) {
-                // 
-                console.log('control error', errorThrown);
-            },
-            method: 'POST',
-            success: function (data) {
-                console.log('control success', data);
-            },
-            url: serverUrlBase + 'control/' + sessionId,
-        });        
+    const sendControl = async function(reqObj) {
+        await new Promise(function(resolve, reject) {
+            $.ajax({
+                contentType: 'application/json',
+                data: JSON.stringify(reqObj),
+                dataType: 'json',
+                error: function (jqXHR, textStatus, errorThrown) {
+                    // 
+                    console.log('control error', errorThrown);
+                    reject(errorThrown);
+                },
+                method: 'POST',
+                success: function (data) {
+                    console.log('control success', data);
+                    resolve(data);
+                },
+                url: serverUrlBase + 'control/' + sessionId,
+            });        
+        });
     }
 
     const checkWebhooks = async function() {
@@ -306,7 +310,6 @@ $(document).ready(function() {
 
             sessionId = dataObj.sessionId;
 
-            sendControl({test:1234});
             checkWebhooks();
 
             apiHelper.particle.getEventStream({ deviceId: 'mine', auth: apiHelper.auth.access_token }).then(function(stream) {                
@@ -367,6 +370,43 @@ $(document).ready(function() {
     $('.webhookTutorialHookOpenInConsole').on('click', async function() {
         window.open('https://console.particle.io/integrations/webhooks/' + webhookId, '_blank');
     });
+
+    let errorChangeTimer;
+    const doErrorChange = async function() {
+        if (errorChangeTimer) {
+            clearTimeout(errorChangeTimer);
+            errorChangeTimer = 0;
+        }
+        let reqObj = {
+            op: 'hookResponse',
+            statusCode: parseInt($('.webhookTutorialErrorsStatus').val()),
+            body: $('.webhookTutorialErrorsResponse').val(),
+        };
+        await sendControl(reqObj);
+    }
+
+    $('.webhookTutorialErrorsStatus').on('change', async function() {
+        await doErrorChange();
+    });
+    $('.webhookTutorialErrorsResponse').on('input', function() {
+        if (errorChangeTimer) {
+            clearTimeout(errorChangeTimer);
+            errorChangeTimer = 0;
+        }
+        setTimeout(errorChangeTimer, 2000);
+    });
+    $('.webhookTutorialErrorsResponse').on('blur', async function() {
+        await doErrorChange();
+    });
+    $('.webhookTutorialErrorsDefaultButton').on('click', async function() {
+        let reqObj = {
+            op: 'hookResponse',
+            default: true,
+        };
+        const res = await sendControl(reqObj);
+        console.log('res', res);
+    });
+
 
     $('.webhookTutorial').each(function() {
         const thisPartial = $(this);
