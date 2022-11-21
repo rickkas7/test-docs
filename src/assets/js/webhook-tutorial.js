@@ -177,7 +177,7 @@ $(document).ready(function() {
     }
 
     const logAddHook = function(options) {
-        // options.hook .hookId, body, headers, method, originalUrl
+        // options.hook .hookId, body, headers, method, originalUrl, query
         let options2 = Object.assign({}, options);
 
         options2.bannerText = 'Webhook Received';
@@ -185,7 +185,7 @@ $(document).ready(function() {
 
         addTable(options2, function(tbodyElem) {
             let addRowOptions = {            
-                keys: ['method', 'headers', 'body'],
+                keys: ['method', 'headers', 'body'], // 'query', 
                 data: options2.hook,
                 tbodyElem,
             };
@@ -226,7 +226,8 @@ $(document).ready(function() {
         });
     }
     
-
+    /*
+    // Not currently used
     const sendControl = async function(reqObj) {
         await new Promise(function(resolve, reject) {
             $.ajax({
@@ -247,6 +248,7 @@ $(document).ready(function() {
             });        
         });
     }
+    */
 
     const checkWebhooks = async function() {
         const webhooks = await apiHelper.particle.listWebhooks({ auth: apiHelper.auth.access_token });

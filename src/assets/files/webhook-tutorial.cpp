@@ -10,6 +10,7 @@ std::chrono::milliseconds testPublishPeriod = 1min;
 unsigned long lastPublish = 0;
 
 bool buttonClicked = false;
+int hookSequence = 0;
 
 void testPeriodic();
 void testButton();
@@ -34,6 +35,10 @@ void loop() {
 
         testPeriodic();
     }
+    if (hookSequence == 0 && Particle.connected()) {
+        // Wait until Particle.connected because the rand() is seeded from the cloud
+        hookSequence = rand();
+    }
 }
 
 void testPeriodic() {
@@ -42,6 +47,9 @@ void testPeriodic() {
     JSONBufferWriter writer(buf, sizeof(buf));
     writer.beginObject();
         writer.name("op").value("periodic");
+        if (hookSequence != 0) {
+            writer.name("id").value(hookSequence++);
+        }
 #if HAL_PLATFORM_POWER_MANAGEMENT
         writer.name("powerSource").value(System.powerSource());
         writer.name("soc").value(System.batteryCharge());
@@ -64,6 +72,9 @@ void testButton() {
     JSONBufferWriter writer(buf, sizeof(buf));
     writer.beginObject();
         writer.name("op").value("button");
+        if (hookSequence != 0) {
+            writer.name("id").value(hookSequence++);
+        }
     writer.endObject();
     writer.buffer()[std::min(writer.bufferSize(), writer.dataSize())] = 0;
 
