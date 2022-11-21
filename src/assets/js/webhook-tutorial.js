@@ -54,6 +54,7 @@ $(document).ready(function() {
                 // Scrolled to right, auto-scroll
                 $(logDivElem).scrollLeft(scrollWidthAfter - width);
             }    
+            $('.webhookTutorialLogScrollControls').show();
         }
 
 
@@ -286,7 +287,10 @@ $(document).ready(function() {
         $('.webhookTutorialHookUrl').text(settings.url);
         $('.webhookTutorialHookRequestType').text(settings.requestType);
         $('.webhookTutorialHookJSON').val(JSON.stringify(settings.json, null, 4));
+        $('.webhookTutorialHookResponseTopic').text(settings.responseTopic);
+        $('.webhookTutorialHookErrorResponseTopic').text(settings.errorResponseTopic);
     
+        
 
         if (webhookId) {
             const editResult = await apiHelper.particle.editIntegration({ integrationId:webhookId, event: webhookName, settings, auth: apiHelper.auth.access_token });   
@@ -369,6 +373,22 @@ $(document).ready(function() {
 
     $('.webhookTutorialHookOpenInConsole').on('click', async function() {
         window.open('https://console.particle.io/integrations/webhooks/' + webhookId, '_blank');
+    });
+
+    $('.webhookTutorialLogScrollOldest').on('click', function() {
+        const logDivElem = $('.webhookTutorialLog');
+        $(logDivElem).scrollLeft(0);
+    });
+
+    $('.webhookTutorialLogScrollLatest').on('click', function() {
+        const logDivElem = $('.webhookTutorialLog');
+        const width = $(logDivElem).width();
+        const scrollWidth = $(logDivElem)[0].scrollWidth;
+
+        if (scrollWidth >= width) {
+            $(logDivElem).scrollLeft(scrollWidth - width);
+        }
+
     });
 
     $('.webhookTutorial').each(function() {
