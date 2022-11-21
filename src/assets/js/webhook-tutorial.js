@@ -276,8 +276,8 @@ $(document).ready(function() {
             },
             noDefaults: true,
             requestType: 'POST',
-            // responseTopic
-            // errorResponseTopic
+            responseTopic: '{{{PARTICLE_DEVICE_ID}}}/hook-response/{{{PARTICLE_EVENT_NAME}}}',
+            errorResponseTopic: '{{{PARTICLE_DEVICE_ID}}}/hook-error/{{{PARTICLE_EVENT_NAME}}}',
             // responseTemplate
             rejectUnauthorized: false,
             url: serverUrlBase + 'hook/' + sessionId
@@ -370,43 +370,6 @@ $(document).ready(function() {
     $('.webhookTutorialHookOpenInConsole').on('click', async function() {
         window.open('https://console.particle.io/integrations/webhooks/' + webhookId, '_blank');
     });
-
-    let errorChangeTimer;
-    const doErrorChange = async function() {
-        if (errorChangeTimer) {
-            clearTimeout(errorChangeTimer);
-            errorChangeTimer = 0;
-        }
-        let reqObj = {
-            op: 'hookResponse',
-            statusCode: parseInt($('.webhookTutorialErrorsStatus').val()),
-            body: $('.webhookTutorialErrorsResponse').val(),
-        };
-        await sendControl(reqObj);
-    }
-
-    $('.webhookTutorialErrorsStatus').on('change', async function() {
-        await doErrorChange();
-    });
-    $('.webhookTutorialErrorsResponse').on('input', function() {
-        if (errorChangeTimer) {
-            clearTimeout(errorChangeTimer);
-            errorChangeTimer = 0;
-        }
-        setTimeout(errorChangeTimer, 2000);
-    });
-    $('.webhookTutorialErrorsResponse').on('blur', async function() {
-        await doErrorChange();
-    });
-    $('.webhookTutorialErrorsDefaultButton').on('click', async function() {
-        let reqObj = {
-            op: 'hookResponse',
-            default: true,
-        };
-        const res = await sendControl(reqObj);
-        console.log('res', res);
-    });
-
 
     $('.webhookTutorial').each(function() {
         const thisPartial = $(this);

@@ -13,9 +13,12 @@ bool buttonClicked = false;
 
 void testPeriodic();
 void testButton();
+void hookResponseHandler(const char *event, const char *data);
 void clickHandler(system_event_t event, int param);
 
 void setup() {
+    Particle.subscribe(System.deviceID() + "/hook-response/" + String(eventName), hookResponseHandler);
+
     // Register a click handler for the MODE button
     System.on(button_click, clickHandler);
 }
@@ -73,6 +76,11 @@ void testButton() {
     }
 
 }
+
+void hookResponseHandler(const char *event, const char *data) {
+    Log.info("hook response %s", data);
+}
+
 
 // MODE button click handler
 void clickHandler(system_event_t event, int param) {

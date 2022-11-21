@@ -31,8 +31,3 @@ Webhooks provide a way for Particle devices to communicate with an external serv
 
 ### Webhook details
 
-
-### Simulating errors
-
-{{> webhook-tutorial-errors}}
-
