@@ -37,7 +37,26 @@ $(document).ready(function() {
     
         $(blockDivElem).append(innerBoxElem);
 
+        const logDivElem = $('.webhookTutorialLog');
+
+        const width = $(logDivElem).width();
+        const scrollLeft = $(logDivElem).scrollLeft();
+        const scrollWidthBefore = $(logDivElem)[0].scrollWidth;
+
         $('.webhookTutorialLog').append(blockDivElem);
+
+        const scrollWidthAfter = $(logDivElem)[0].scrollWidth;
+
+        // console.log('scroll', { width, scrollLeft, scrollWidthBefore, scrollWidthAfter})
+
+        if (scrollWidthBefore >= width) {
+            if (scrollLeft >= (scrollWidthBefore - width - 200)) {
+                // Scrolled to right, auto-scroll
+                $(logDivElem).scrollLeft(scrollWidthAfter - width);
+            }    
+        }
+
+
     }
 
     const addTwoColumnRow = function(options) {        
