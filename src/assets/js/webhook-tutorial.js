@@ -6,11 +6,10 @@ $(document).ready(function() {
     }
 
     const serverUrlBase = 'http://home.rickk.com:5123/';
-    const webhookSuffix = 'WebhookTutorial';
+    const webhookName = 'WebhookTutorial01';
 
     let sessionId;
     let webhookId;
-    let webhookName;
        
 
     const logAddBlock = function(options) {
@@ -75,6 +74,29 @@ $(document).ready(function() {
         }
     }
 
+    const addTable = function(options, fn) {
+        const outerDivElem = document.createElement('div');
+
+        const tableElem = options.content = document.createElement('table');
+        $(tableElem).addClass('apiHelperTableNoMargin');
+
+        const tbodyElem = document.createElement('tbody');
+
+        addTwoColumnRow({
+            left: 'Time',
+            right: new Date().toTimeString().split(' ')[0],
+            tbodyElem,
+        });
+
+        fn(tbodyElem, options);
+
+        $(tableElem).append(tbodyElem);
+
+        $(outerDivElem).append(tableElem);
+
+        logAddBlock(options);
+    };
+
     const logAddEvent = function(options) {
         // options.event.name, .data, .published_at, .coreid
         let options2 = Object.assign({}, options);
@@ -94,37 +116,27 @@ $(document).ready(function() {
             }
         }
         else {
-            options2.event.bannerText = 'Event (Device)';
+            options2.bannerText = 'Event (Device)';
             options2.bannerBackground = '#00E1FF';   // COLOR_ParticleBlue_500
         }
 
-        const outerDivElem = options2.content = document.createElement('div');
+        addTable(options2, function(tbodyElem) {
+            let eventDataJson;
+            try {
+                eventDataJson = JSON.parse(options.event.data);
+                options2.event.data = JSON.stringify(eventDataJson, null, 4);
+            }
+            catch(e) {            
+            }
+    
+            let addRowOptions = {
+                keys: ['name', 'data', 'published_at', 'coreid'],
+                data: options2.event,
+                tbodyElem,
+            };
+            addMultipleRows(addRowOptions);
+        });
 
-        const tableElem = document.createElement('table');
-        $(tableElem).addClass('apiHelperTableNoMargin');
-
-        const tbodyElem = document.createElement('tbody');
-
-        let eventDataJson;
-        try {
-            eventDataJson = JSON.parse(options.event.data);
-            options2.event.data = JSON.stringify(eventDataJson, null, 4);
-        }
-        catch(e) {            
-        }
-
-        let addRowOptions = {
-            keys: ['name', 'data', 'published_at', 'coreid'],
-            data: options2.event,
-            tbodyElem,
-        };
-        addMultipleRows(addRowOptions);
-
-        $(tableElem).append(tbodyElem);
-
-        $(outerDivElem).append(tableElem);
-
-        logAddBlock(options2);
     }
 
     const logAddData = function(options) {
@@ -133,26 +145,15 @@ $(document).ready(function() {
         options2.bannerText = 'Parsed Data';
         options2.bannerBackground = '#FFADBD';   // COLOR_Watermelon_400
 
-        const outerDivElem = options2.content = document.createElement('div');
-
-    
-        const tableElem = document.createElement('table');
-        $(tableElem).addClass('apiHelperTableNoMargin');
-
-        const tbodyElem = document.createElement('tbody');
-
-        let addRowOptions = {
-            keys: Object.keys(options2.data),
-            data: options2.data,
-            tbodyElem,
-        };
-        addMultipleRows(addRowOptions);
-
-        $(tableElem).append(tbodyElem);
-
-        $(outerDivElem).append(tableElem);
-
-        logAddBlock(options2);
+        addTable(options2, function(tbodyElem) {
+            let addRowOptions = {
+                keys: Object.keys(options2.data),
+                data: options2.data,
+                tbodyElem,
+            };
+            addMultipleRows(addRowOptions);
+        });
+        
     }
 
     const logAddHook = function(options) {
@@ -162,26 +163,14 @@ $(document).ready(function() {
         options2.bannerText = 'Webhook Received';
         options2.bannerBackground = '#FA6200';   // COLOR_Tangerine_600
 
-        const outerDivElem = options2.content = document.createElement('div');
-
-    
-        const tableElem = document.createElement('table');
-        $(tableElem).addClass('apiHelperTableNoMargin');
-
-        const tbodyElem = document.createElement('tbody');
-
-        let addRowOptions = {
-            keys: ['method', 'headers', 'body'],
-            data: options2.hook,
-            tbodyElem,
-        };
-        addMultipleRows(addRowOptions);
-
-        $(tableElem).append(tbodyElem);
-
-        $(outerDivElem).append(tableElem);
-
-        logAddBlock(options2);
+        addTable(options2, function(tbodyElem) {
+            let addRowOptions = {            
+                keys: ['method', 'headers', 'body'],
+                data: options2.hook,
+                tbodyElem,
+            };
+            addMultipleRows(addRowOptions);
+        });
 
         // Add to server received data
         try {
@@ -195,6 +184,8 @@ $(document).ready(function() {
             console.log('error parsing body', e);   
         }
 
+
+
     }
 
     const logAddHookResponse = function(options) {
@@ -204,26 +195,15 @@ $(document).ready(function() {
         options2.bannerText = 'Webhook Response';
         options2.bannerBackground = '#FF9F61';    // COLOR_Tangerine_400
 
-        const outerDivElem = options2.content = document.createElement('div');
+        addTable(options2, function(tbodyElem) {
 
-    
-        const tableElem = document.createElement('table');
-        $(tableElem).addClass('apiHelperTableNoMargin');
-
-        const tbodyElem = document.createElement('tbody');
-
-        let addRowOptions = {
-            keys: ['statusCode', 'body'],
-            data: options2.hook,
-            tbodyElem,
-        };
-        addMultipleRows(addRowOptions);
-
-        $(tableElem).append(tbodyElem);
-
-        $(outerDivElem).append(tableElem);
-
-        logAddBlock(options2);
+            let addRowOptions = {
+                keys: ['statusCode', 'body'],
+                data: options2.hook,
+                tbodyElem,
+            };
+            addMultipleRows(addRowOptions);
+        });
     }
     
 
@@ -249,15 +229,16 @@ $(document).ready(function() {
 
         console.log('webhooks', webhooks.body);
 
+        webhookId = 0;
+
         for(const webhookObj of webhooks.body) {
-            if (webhookObj.event.endsWith(webhookSuffix)) {
+            if (webhookObj.event == webhookName) {
                 console.log('old hook exists', webhookObj); 
-                await apiHelper.particle.deleteWebhook({ hookId: webhookObj.id, auth: apiHelper.auth.access_token });     
+                webhookId = webhookObj.id;
             }
         }
 
         // Create new webhook
-        webhookName = sessionId + '-' + webhookSuffix;
         
         let settings = {
             headers: {
@@ -284,10 +265,17 @@ $(document).ready(function() {
         $('.webhookTutorialHookJSON').val(JSON.stringify(settings.json, null, 4));
     
 
-        const createResult = await apiHelper.particle.createIntegration({ event: webhookName, settings, auth: apiHelper.auth.access_token });             
-        console.log('createResult', createResult);
+        if (webhookId) {
+            const editResult = await apiHelper.particle.editIntegration({ integrationId:webhookId, event: webhookName, settings, auth: apiHelper.auth.access_token });   
+            console.log('editResult', editResult);
+        }
+        else {
+            const createResult = await apiHelper.particle.createIntegration({ event: webhookName, settings, auth: apiHelper.auth.access_token });             
+            console.log('createResult', createResult);
+    
+            webhookId = createResult.body.id;    
+        }
 
-        webhookId = createResult.body.id;
     }
 
     const startSession = function() {
@@ -308,7 +296,7 @@ $(document).ready(function() {
                         console.log('event', event);
 
                         // event.name, .data, .published_at, .coreid
-                        if (event.name.indexOf(sessionId) >= 0) {
+                        if (event.name.indexOf(webhookName) >= 0 || event.name.indexOf(sessionId) >= 0) {
                             logAddEvent({event});    
                         }
                     }

@@ -4,6 +4,8 @@ SerialLogHandler logHandler;
 
 SYSTEM_THREAD(ENABLED);
 
+const char *eventName = "WebhookTutorial01";
+
 std::chrono::milliseconds testPublishPeriod = 1min;
 unsigned long lastPublish = 0;
 
@@ -24,7 +26,7 @@ void loop() {
         testButton();
     }
 
-    if (Particle.connected() && millis() - lastPublish >= testPublishPeriod.count()) {
+    if (millis() - lastPublish >= testPublishPeriod.count()) {
         lastPublish = millis();
 
         testPeriodic();
@@ -32,7 +34,25 @@ void loop() {
 }
 
 void testPeriodic() {
+    char buf[256];
 
+    JSONBufferWriter writer(buf, sizeof(buf));
+    writer.beginObject();
+        writer.name("op").value("periodic");
+#if HAL_PLATFORM_POWER_MANAGEMENT
+        writer.name("powerSource").value(System.powerSource());
+        writer.name("soc").value(System.batteryCharge());
+#endif
+    writer.endObject();
+    writer.buffer()[std::min(writer.bufferSize(), writer.dataSize())] = 0;
+
+    if (Particle.connected()) {
+        Particle.publish(eventName, buf);
+        Log.info("publish %s %s", eventName, buf);
+    }
+    else {
+        Log.info("periodic but not cloud connected %s", buf);
+    }
 }
 
 void testButton() {
@@ -42,9 +62,14 @@ void testButton() {
     writer.beginObject();
         writer.name("op").value("button");
     writer.endObject();
+    writer.buffer()[std::min(writer.bufferSize(), writer.dataSize())] = 0;
 
     if (Particle.connected()) {
-        Particle.publish
+        Particle.publish(eventName, buf);
+        Log.info("publish %s %s", eventName, buf);
+    }
+    else {
+        Log.info("button pressed but not cloud connected %s", buf);
     }
 
 }
