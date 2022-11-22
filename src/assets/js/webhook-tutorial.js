@@ -1,3 +1,4 @@
+
 $(document).ready(function() {
     $('.webhookTutorialStarted').hide();
 
@@ -10,8 +11,77 @@ $(document).ready(function() {
 
     let sessionId;
     let webhookId;
-       
+    let currentKind;
 
+    const updateSpans = function() {
+        $('.webhookTutorialSpan').each(function() {
+            const thisPartial = $(this);
+    
+            const options = $(thisPartial).data('options').split(',').map(e => e.trim());
+
+            if (options.includes('webhookName')) {
+                $(thisPartial).text(webhookName);
+            }
+        });
+    };
+
+    // Add a table row with two columns to a table
+    // options.left - text contents for left cell
+    //  .right - text contents for right cell
+    //  .rightPre - text content for right cell, but format as a <pre>
+    //  .tbodyElem - table body to append to
+    const addTwoColumnRow = function(options) {        
+        const trElem = document.createElement('tbody');
+
+        let tdElem = document.createElement('td');
+        $(tdElem).text(options.left);
+        $(tdElem).css('width', '75px');
+        $(trElem).append(tdElem);
+
+        tdElem = document.createElement('td');
+        $(tdElem).css('width', '275px');
+
+        if (options.rightPre) {
+            const preElem = document.createElement('pre');
+            $(preElem).css('width', '275px');
+            $(preElem).css('overflow', 'auto');
+            $(preElem).css('white-space', 'pre')
+            $(preElem).css('padding', '0px 0px 0px 0px')
+            $(preElem).addClass('apiHelperMonoSmall');
+            $(preElem).text(options.right);
+            $(tdElem).append(preElem);    
+        }
+        else {
+            $(tdElem).text(options.right);
+        }
+
+        $(trElem).append(tdElem);
+
+        $(options.tbodyElem).append(trElem);
+    }
+
+    // Add multiple rows to a table
+    // options.tbodyElem - table body to append to
+    //  .keys - array of keys to use for each row
+    //  .data - object containing the data to use for each row
+    //  .mapKeys - optional object. If mapKeys[key] exists, it's used as the left title for the cell
+    const addMultipleRows = function(options) {
+        for(const key of options.keys) {
+            addTwoColumnRow({
+                left: (options.mapKey && options.mapKey[key]) ? options.mapKey[key] : key,
+                right: options.data[key],
+                tbodyElem: options.tbodyElem,
+                rightPre: true,
+            })
+        }
+    }
+
+
+    // Add a block to the log
+    // options.outputElem - element to append to
+    //  .content - Content to insert into the box
+    //  .bannerText - Text for the top banner
+    //  .bannerBackground - Color for the banner background
     const logAddBlock = function(options) {
         const blockDivElem = document.createElement('div');
         // $(blockDivElem).css('width', '300px');
@@ -37,64 +107,50 @@ $(document).ready(function() {
     
         $(blockDivElem).append(innerBoxElem);
 
-        const logDivElem = $('.webhookTutorialLog');
+        $(options.outputElem).append(blockDivElem);
 
-        const width = $(logDivElem).width();
-        const scrollLeft = $(logDivElem).scrollLeft();
-        const scrollWidthBefore = $(logDivElem)[0].scrollWidth;
+        $('.webhookTutorialExample').each(function() {
+            const exampleElem = $(this);
+            const exampleOptions = $(exampleElem).data('options').split(',').map(e => e.trim());
 
-        $('.webhookTutorialLog').append(blockDivElem);
+            if (!options.currentKind) {
+                return;
+            }
 
-        const scrollWidthAfter = $(logDivElem)[0].scrollWidth;
+            if (!exampleOptions.includes(options.currentKind)) {
+                return;
+            }
 
-        // console.log('scroll', { width, scrollLeft, scrollWidthBefore, scrollWidthAfter})
+            if (!exampleOptions.includes(options.op)) {
+                return;
+            }
 
-        if (scrollWidthBefore >= width) {
-            if (scrollLeft >= (scrollWidthBefore - width - 200)) {
-                // Scrolled to right, auto-scroll
-                $(logDivElem).scrollLeft(scrollWidthAfter - width);
-            }    
-            $('.webhookTutorialLogScrollControls').show();
-        }
+            if (options.op == 'event' && exampleOptions.includes('trigger') && !options.event.name.startsWith(webhookName)) {
+                return;
+            }
 
+            if (options.op == 'event') {
+                const hookKind = exampleOptions.find(e => e.startsWith('hook-'));
+                if (hookKind) {
+                    console.log('has hookKind=' + hookKind + ' eventKind=' + options.eventKind);
+                    if (options.eventKind != hookKind) {
+                        return;
+                    }
+                }
+            }
 
+            // Update this element
+            $(exampleElem).html(blockDivElem.cloneNode(true));        
+        });
     }
 
-    const addTwoColumnRow = function(options) {        
-        const trElem = document.createElement('tbody');
-
-        let tdElem = document.createElement('td');
-        $(tdElem).text(options.left);
-        $(trElem).append(tdElem);
-
-        tdElem = document.createElement('td');
-
-        if (options.rightPre) {
-            const preElem = document.createElement('pre');
-            $(preElem).addClass('apiHelperMonoSmall');
-            $(preElem).text(options.right);
-            $(tdElem).append(preElem);    
-        }
-        else {
-            $(tdElem).text(options.right);
-        }
-
-        $(trElem).append(tdElem);
-
-        $(options.tbodyElem).append(trElem);
-    }
-    const addMultipleRows = function(options) {
-        for(const key of options.keys) {
-            addTwoColumnRow({
-                left: (options.mapKey && options.mapKey[key]) ? options.mapKey[key] : key,
-                right: options.data[key],
-                tbodyElem: options.tbodyElem,
-                rightPre: true,
-            })
-        }
-    }
-
-    const addTable = function(options, fn) {
+    // Adds a new block that contains a table
+    // options.outputElem - element to append to
+    //  .bannerText - Text for the top banner
+    //  .bannerBackground - Color for the banner background
+    // 
+    // Calls fn(tbody, options) to fill in the table rows under the time row
+    const logAddBlockTable = function(options, fn) {
         const outerDivElem = document.createElement('div');
 
         const tableElem = options.content = document.createElement('table');
@@ -117,114 +173,135 @@ $(document).ready(function() {
         logAddBlock(options);
     };
 
-    const logAddEvent = function(options) {
-        // options.event.name, .data, .published_at, .coreid
+
+
+    const logAddItem = function(options) {
         let options2 = Object.assign({}, options);
-
-        if (options2.event.coreid == 'api') {
-            options2.bannerText = 'Event (API)';
-            options2.bannerBackground = '#5FD898';   // COLOR_Mint_700
-        }
-        else
-        if (options2.event.coreid == 'particle-internal') {
-            options2.bannerText = 'Event (Internal)';
-            if (options2.event.name.indexOf('hook-error') >= 0) {
-                options2.bannerBackground = '#FF6F76';  // COLOR_State_Red_500 
-            }
-            else {
-                options2.bannerBackground = '#B0E5C9';  // COLOR_Mint_500 
-            }
-        }
-        else {
-            options2.bannerText = 'Event (Device)';
-            options2.bannerBackground = '#00E1FF';   // COLOR_ParticleBlue_500
-        }
-
-        addTable(options2, function(tbodyElem) {
-            let eventDataJson;
-            try {
-                eventDataJson = JSON.parse(options.event.data);
-                options2.event.data = JSON.stringify(eventDataJson, null, 4);
-            }
-            catch(e) {            
-            }
-    
-            let addRowOptions = {
-                keys: ['name', 'data', 'published_at', 'coreid'],
-                data: options2.event,
-                tbodyElem,
-            };
-            addMultipleRows(addRowOptions);
-        });
-
-    }
-
-    const logAddData = function(options) {
-        let options2 = Object.assign({}, options);
-
-        options2.bannerText = 'Parsed Data';
-        options2.bannerBackground = '#FFADBD';   // COLOR_Watermelon_400
-
-        addTable(options2, function(tbodyElem) {
-            let addRowOptions = {
-                keys: Object.keys(options2.data),
-                data: options2.data,
-                tbodyElem,
-            };
-            addMultipleRows(addRowOptions);
-        });
+        options2.currentKind = currentKind;
         
-    }
+        const logDivElem = options2.outputElem = $('.webhookTutorialLog');
 
-    const logAddHook = function(options) {
-        // options.hook .hookId, body, headers, method, originalUrl, query
-        let options2 = Object.assign({}, options);
+        const width = $(logDivElem).width();
+        const scrollLeft = $(logDivElem).scrollLeft();
+        const scrollWidthBefore = $(logDivElem)[0].scrollWidth;
 
-        options2.bannerText = 'Webhook Received';
-        options2.bannerBackground = '#FA6200';   // COLOR_Tangerine_600
+        switch(options2.op) {
+            case 'event':
 
-        addTable(options2, function(tbodyElem) {
-            let addRowOptions = {            
-                keys: ['method', 'headers', 'body'], // 'query', 
-                data: options2.hook,
-                tbodyElem,
-            };
-            addMultipleRows(addRowOptions);
-        });
+                if (options2.event.coreid == 'api') {
+                    options2.bannerText = 'Event (API)';
+                    options2.bannerBackground = '#5FD898';   // COLOR_Mint_700
+                    options2.currentKind = currentKind = 'api'; 
+                }
+                else
+                if (options2.event.coreid == 'particle-internal') {
+                    options2.bannerText = 'Event (Internal)';
+                    if (options2.event.name.indexOf('hook-error') >= 0) {
+                        options2.bannerBackground = '#FF6F76';  // COLOR_State_Red_500 
+                    }
+                    else {
+                        options2.bannerBackground = '#B0E5C9';  // COLOR_Mint_500 
+                    }
+                    const m = options2.event.name.match(/(hook-[a-z]+)/);
+                    if (m) {
+                        // hook-sent, hook-response, hook-error
+                        options2.eventKind = m[1];
+                    }
+                }
+                else {
+                    options2.bannerText = 'Event (Device)';
+                    options2.bannerBackground = '#00E1FF';   // COLOR_ParticleBlue_500
+                    options2.currentKind = currentKind = 'device';
+                }
+        
+                logAddBlockTable(options2, function(tbodyElem) {
+                    let eventDataJson;
+                    try {
+                        eventDataJson = JSON.parse(options.event.data);
+                        options2.event.data = JSON.stringify(eventDataJson, null, 4);
+                    }
+                    catch(e) {            
+                    }
+            
+                    let addRowOptions = {
+                        keys: ['name', 'data', 'published_at', 'coreid'],
+                        data: options2.event,
+                        tbodyElem,
+                    };
+                    addMultipleRows(addRowOptions);
+                });
+                break;
 
-        // Add to server received data
-        try {
-            const bodyJson = JSON.parse(options2.hook.body);
+            case 'hook':
+                options2.bannerText = 'Webhook Received';
+                options2.bannerBackground = '#FA6200';   // COLOR_Tangerine_600
+        
+                logAddBlockTable(options2, function(tbodyElem) {
+                    let addRowOptions = {            
+                        keys: ['method', 'headers', 'body'], // 'query', 
+                        data: options2.hook,
+                        tbodyElem,
+                    };
+                    addMultipleRows(addRowOptions);
+                });
+        
+                // Add to server received data
+                try {
+                    const bodyJson = JSON.parse(options2.hook.body);
+        
+                    const dataJson = JSON.parse(bodyJson.data);
+        
+                    logAddItem({op:'data', data:dataJson});
+                }
+                catch(e) {         
+                    console.log('error parsing body', e);   
+                }
+                break;
 
-            const dataJson = JSON.parse(bodyJson.data);
+            case 'hookResponse':
+                options2.bannerText = 'Webhook Response';
+                options2.bannerBackground = '#FF9F61';    // COLOR_Tangerine_400
+        
+                logAddBlockTable(options2, function(tbodyElem) {
+        
+                    let addRowOptions = {
+                        keys: ['statusCode', 'body'],
+                        data: options2.hook,
+                        tbodyElem,
+                    };
+                    addMultipleRows(addRowOptions);
+                });
+                 break;
 
-            logAddData({data:dataJson});
+            case 'data':
+                options2.bannerText = 'Parsed Data';
+                options2.bannerBackground = '#FFADBD';   // COLOR_Watermelon_400
+        
+                logAddBlockTable(options2, function(tbodyElem) {
+                    let addRowOptions = {
+                        keys: Object.keys(options2.data),
+                        data: options2.data,
+                        tbodyElem,
+                    };
+                    addMultipleRows(addRowOptions);
+                });
+                break;
         }
-        catch(e) {         
-            console.log('error parsing body', e);   
+
+        const scrollWidthAfter = $(logDivElem)[0].scrollWidth;
+
+        // console.log('scroll', { width, scrollLeft, scrollWidthBefore, scrollWidthAfter})
+
+        if (!options2.noScroll && scrollWidthBefore >= width) {
+            if (scrollLeft >= (scrollWidthBefore - width - 200)) {
+                // Scrolled to right, auto-scroll
+                $(logDivElem).scrollLeft(scrollWidthAfter - width);
+            }    
+            $('.webhookTutorialLogScrollControls').show();
         }
 
+    };
 
-
-    }
-
-    const logAddHookResponse = function(options) {
-        // options.hook .hookId, body, statusCode
-        let options2 = Object.assign({}, options);
-
-        options2.bannerText = 'Webhook Response';
-        options2.bannerBackground = '#FF9F61';    // COLOR_Tangerine_400
-
-        addTable(options2, function(tbodyElem) {
-
-            let addRowOptions = {
-                keys: ['statusCode', 'body'],
-                data: options2.hook,
-                tbodyElem,
-            };
-            addMultipleRows(addRowOptions);
-        });
-    }
     
     /*
     // Not currently used
@@ -325,7 +402,7 @@ $(document).ready(function() {
 
                         // event.name, .data, .published_at, .coreid
                         if (event.name.indexOf(webhookName) >= 0 || event.name.indexOf(sessionId) >= 0) {
-                            logAddEvent({event});    
+                            logAddItem({op:'event', event});    
                         }
                     }
                     catch(e) {
@@ -340,7 +417,7 @@ $(document).ready(function() {
                 const hookObj = JSON.parse(event.data);
 
                 console.log('hook', hookObj);
-                logAddHook({hook: hookObj});    
+                logAddItem({op:'hook', hook: hookObj});    
             }
             catch(e) {
                 console.log('exception in hook listener', e);
@@ -353,7 +430,7 @@ $(document).ready(function() {
                 const hookObj = JSON.parse(event.data);
 
                 console.log('hookResponse', hookObj);
-                logAddHookResponse({hook: hookObj});    
+                logAddItem({op:'hookResponse', hook: hookObj});    
             }
             catch(e) {
                 console.log('exception in hook listener', e);
@@ -368,6 +445,7 @@ $(document).ready(function() {
     $('.webhookTutorialHookTest').on('click', async function() {
         const dataObj = {
             op: 'test',
+            id: Math.floor(Math.random() * 100000),
         };
         await apiHelper.particle.publishEvent({ name: webhookName, data: JSON.stringify(dataObj), auth: apiHelper.auth.access_token });
 
@@ -412,6 +490,7 @@ $(document).ready(function() {
             });
         }
 
+        updateSpans();
     });
 });
 
