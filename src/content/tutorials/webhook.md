@@ -94,7 +94,7 @@ The **Webhook received** event is similar but note the **coreid** in the body. Y
 
 {{> webhook-tutorial-example options="device,hook"}}
 
-The **Parsed data** contains additional information for cellular devices to show how to easily add data to the JSON data. It will contain the **powerSource** and battery **soc** (state-of-charge).
+The **Parsed data** is JSON, which is easy to parse and generate, and is easily extendible. On cellular devices it will contain the **powerSource** and battery **soc** (state-of-charge) items, for example.
 
 {{> webhook-tutorial-example options="device,data"}}
 
@@ -104,6 +104,47 @@ The last **Event (Internal)** is the hook-response that is generated.
 
 
 ### Webhook details
+
+The **Event Name** is **{{webhook-tutorial "webhookName"}}**. Note that the event name is a prefix; any event that begins with this string will trigger the webhook. For this reason, you probably don't want to use too short of a string.
+
+The **URL** is the server you are sending data to. This could be your own server, a service like AWS, Azure, or Google Cloud, or another 3rd-party service that is handling your data. The random-ish data in this URL is just so the data you publish stays separate from other users of this tutorial. Note that every time you reload this page the URL changes for this tutorial.
+
+The **Request Type** is a HTTP method, typically GET, POST, or PUT. The method depends on what your server is expecting.
+
+The **Request Format** depends on the method, and what your server is expecting. For POST and PUT, this is typically JSON or Web Form. This tutorial server only works with JSON formatted data in a POST.
+
+The **Device** can be limited to a single device in your account, or **Any**. Product webhooks don't have this option and are always triggered for every device in the product fleet.
+
+The **Status** can be used to temporarily disable a webhook.
+
+The **Response Topic** is **{{webhook-tutorial "responseTopic"}}**. Breaking this down, there are three components separated by slashes.
+
+- `\{{{PARTICLE_DEVICE_ID}}}` puts the Device ID of the requesting device in the beginning of the response topic. This is desirable because it allows the event to only go to the device that triggered the webhook. Without this, the event could go to every device, which is not only unnecessary, but also will use an unnecessarily large number of data operations.
+- `hook-response` is a constant string for the hook response, to differentiate it from errors and hook-sent.
+- `\{{{PARTICLE_EVENT_NAME}}}` is the name of the triggering event. This makes it possible for the subscriber to handle responses for multiple webhooks.
+
+The end result will be something like "{{webhook-tutorial "lastDeviceId"}}/hook-response/{{webhook-tutorial "webhookName"}}".
+
+The response topic must match the subscription in your source code. This is what the tutorial source uses:
+
+```cpp
+Particle.subscribe(System.deviceID() + "/hook-response/" + String(eventName), hookResponseHandler);
+```
+
+The **Error Topic** works just like the response topic, but for errors.
+
+### Webhook errors
+
+There are two ways to return an error from your webhook server:
+
+- Return a HTTP error code (not 200)
+- Return a HTTP success code (200) and include the error condition in the response data.
+
+We highly recommend the latter for most cases, except situations where the server is actually overloaded or failing with an internal error that is not caused by the request data. 
+
+The reason is that when a webhook server returns an error, it will always be retried three times. Additionally, if the number of errors becomes large relative to the number of successful requests, the server will be throttled. This shows in the console as "Sleep" and is designed to prevent overloading the server. The success/failure rating is determined by the hostname in the URL, and is not per-account, so you can inadvertently cause other webhooks to sleep by returning errors.
+
+
 
 
 ### Firmware details

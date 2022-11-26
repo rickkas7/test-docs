@@ -6,22 +6,28 @@ $(document).ready(function() {
         return;
     }
 
-    const serverUrlBase = 'http://home.rickk.com:5123/';
+    const serverUrlBase = 'https://docs4.rickk.com:8002/';
     const webhookName = 'WebhookTutorial01';
 
     let sessionId;
     let webhookId;
     let currentKind;
 
+    let spanData = {
+        webhookName,
+        lastDeviceId: '<last-device-id>',
+    };
+
     const updateSpans = function() {
         $('.webhookTutorialSpan').each(function() {
             const thisPartial = $(this);
     
-            const options = $(thisPartial).data('options').split(',').map(e => e.trim());
+            const key = $(thisPartial).data('key');
+            console.log('updateSpans key=' + key, spanData);
 
-            if (options.includes('webhookName')) {
-                $(thisPartial).text(webhookName);
-            }
+            if (spanData[key]) {
+                $(thisPartial).text(spanData[key]);
+            }            
         });
     };
 
@@ -212,6 +218,8 @@ $(document).ready(function() {
                     options2.bannerText = 'Event (Device)';
                     options2.bannerBackground = '#00E1FF';   // COLOR_ParticleBlue_500
                     options2.currentKind = currentKind = 'device';
+                    spanData.lastDeviceId = options2.event.coreid;
+                    updateSpans();
                 }
         
                 logAddBlockTable(options2, function(tbodyElem) {
@@ -369,7 +377,8 @@ $(document).ready(function() {
         $('.webhookTutorialHookResponseTopic').text(settings.responseTopic);
         $('.webhookTutorialHookErrorResponseTopic').text(settings.errorResponseTopic);
     
-        
+        spanData = Object.assign(spanData, settings);
+        updateSpans();
 
         if (webhookId) {
             const editResult = await apiHelper.particle.editIntegration({ integrationId:webhookId, event: webhookName, settings, auth: apiHelper.auth.access_token });   

@@ -1,5 +1,5 @@
 var Handlebars = require('handlebars');
-module.exports = function(options) {
-	var html = '<span class="webhookTutorialSpan" data-options="' + options + '"></span>';
+module.exports = function(key) {
+	var html = '<span class="webhookTutorialSpan" data-key="' + key + '"></span>';
 	return new Handlebars.SafeString(html);
 }
