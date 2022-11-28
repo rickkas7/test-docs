@@ -151,7 +151,13 @@ The reason is that when a webhook server returns an error, it will always be ret
 
 ### Clean-up
 
+To clean up after this tutorial, you might want to delete the webhook that was created.
+
 {{> webhook-tutorial-done}}
+
+---
+
+If you flashed the test project firmware to a device, you may want to flash Tinker so the device will stop publishing periodically. You can also flash your own firmware instead.
 
 {{> flash-tinker}}
 
