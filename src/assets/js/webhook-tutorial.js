@@ -6,7 +6,7 @@ $(document).ready(function() {
         return;
     }
 
-    const serverUrlBase = 'https://docs4.rickk.com:8002/';
+    const serverUrlBase = 'https://docs4.rickk.com:7201/';
     const webhookName = 'WebhookTutorial01';
 
     let sessionId;
