@@ -149,5 +149,12 @@ The reason is that when a webhook server returns an error, it will always be ret
 
 ### Firmware details
 
+### Clean-up
+
+{{> webhook-tutorial-done}}
+
+{{> flash-tinker}}
+
+
 
 </div><p> <!-- webhookTutorialStarted -->

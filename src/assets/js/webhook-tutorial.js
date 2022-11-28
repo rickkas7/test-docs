@@ -480,6 +480,13 @@ $(document).ready(function() {
 
     });
 
+
+    $('.webhookTutorialDeleteWebhookButton').on('click', async function() {
+        await apiHelper.particle.deleteIntegration({ integrationId:webhookId, auth: apiHelper.auth.access_token });   
+
+        $('.webhookTutorialDeleteWebhookButton').prop('disabled', 'disabled');
+    });
+
     $('.webhookTutorial').each(function() {
         const thisPartial = $(this);
 
