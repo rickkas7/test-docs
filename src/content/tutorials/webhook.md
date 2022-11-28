@@ -144,10 +144,187 @@ We highly recommend the latter for most cases, except situations where the serve
 
 The reason is that when a webhook server returns an error, it will always be retried three times. Additionally, if the number of errors becomes large relative to the number of successful requests, the server will be throttled. This shows in the console as "Sleep" and is designed to prevent overloading the server. The success/failure rating is determined by the hostname in the URL, and is not per-account, so you can inadvertently cause other webhooks to sleep by returning errors.
 
-
-
-
 ### Firmware details
+
+This is recommended for all applications:
+
+- Enable the serial log handler instead of using `Serial.print`.
+- Use `SYSTEM_THREAD(ENABLED)`.
+
+```cpp
+#include "Particle.h"
+
+SerialLogHandler logHandler;
+
+SYSTEM_THREAD(ENABLED);
+```
+
+The first configurable parameter is the name of the webhook, which must prefix match the webhook configuration.
+
+The second configurable parameter is how often to publish, once per minute in this example.
+
+```cpp
+const char *eventName = "WebhookTutorial01";
+
+std::chrono::milliseconds testPublishPeriod = 1min;
+```
+
+The setup() function does one-time setup.
+
+The `Particle.subscribe` function sets the event to subscribe to. This must match the **Response Topic** in the webhook configuration. Note all applications need to know whether the webhook succeeded or not. If you don't need this information, leaving off the subscription will reduce in half the number of data operations used per publish by only sending the data one way (device to cloud) instead of both ways.
+
+The button click handler makes the test firmware publish an event when the MODE button is pressed.
+
+```cpp
+void setup()
+{
+    Particle.subscribe(System.deviceID() + "/hook-response/" + String(eventName), hookResponseHandler);
+
+    // Register a click handler for the MODE button
+    System.on(button_click, clickHandler);
+}
+```
+
+The button handler (clickHandler()) runs at interrupt time and you can't publish directly from the handler. It sets a flag variable (`buttonClicked`) and handles it from `loop()` instead.
+
+```cpp
+if (buttonClicked)
+{
+    buttonClicked = false;
+    testButton();
+}
+```
+
+This code handles the periodic publishing of events.
+
+```cpp
+if (millis() - lastPublish >= testPublishPeriod.count())
+{
+    lastPublish = millis();
+
+    testPeriodic();
+}
+```
+
+The publishes contain a unique integer value `id`. While it's not unreasonable to always start the ID at 0 at reboot, another option is to set it to a random value. The standard C library function `rand()` is pseudo-random but is seeded with a new random value when connecting to the cloud, so that works well.
+
+```cpp
+if (hookSequence == 0 && Particle.connected())
+{
+    // Wait until Particle.connected because the rand() is seeded from the cloud
+    hookSequence = rand();
+}
+```
+
+This is the function to create the periodic publish data.
+
+The publish data is generated in JSON format because it's easy to generate and decode, and is easily extensible in the future. Note that the publish here is limited to 255 bytes (plus a null terminator) but on many devices, the limit is actually 1024 bytes.
+
+```cpp
+void testPeriodic()
+{
+    char buf[256];
+
+    JSONBufferWriter writer(buf, sizeof(buf));
+    writer.beginObject();
+```
+
+Here we fill in the JSON data in the publish. The `op` is the operation code, either `periodic` or `button`.
+
+The `id` is a monotonically increasing integer and is a useful thing to add to your JSON payload. Because event delivery is best-effort, at least once, it's possible for a single event to be delivered more than once. This can happen if the ACK is lost, causing the device to send it again. Including a unique ID helps in dedupe in your server code.
+
+Also, if you sent multiple events, it is possible that the subscription handlers may be called in a different order than the original request, and the `id` can help with this.
+
+```cpp
+    writer.name("op").value("periodic");
+    if (hookSequence != 0)
+    {
+        writer.name("id").value(hookSequence++);
+    }
+```
+
+This is an example of how easy it is to adjust the JSON payload. On cellular devices it adds two additional pieces of information: the power source and the state-of-charge (SoC) of the battery.
+
+```cpp
+#if HAL_PLATFORM_POWER_MANAGEMENT
+    writer.name("powerSource").value(System.powerSource());
+    writer.name("soc").value(System.batteryCharge());
+#endif
+```
+
+Finally, this code completes the JSON object and sends it, if the cloud is connected.
+
+You should always check that the cloud is connected before publishing.
+
+```cpp
+    writer.endObject();
+    writer.buffer()[std::min(writer.bufferSize(), writer.dataSize())] = 0;
+
+    if (Particle.connected())
+    {
+        Particle.publish(eventName, buf);
+        Log.info("publish %s %s", eventName, buf);
+    }
+    else
+    {
+        Log.info("periodic but not cloud connected %s", buf);
+    }
+}
+```
+
+This does the publish for pressing the button. It's pretty much a simpler subset of the code from the periodic case.
+
+```cpp
+void testButton()
+{
+    char buf[256];
+
+    JSONBufferWriter writer(buf, sizeof(buf));
+    writer.beginObject();
+    writer.name("op").value("button");
+    if (hookSequence != 0)
+    {
+        writer.name("id").value(hookSequence++);
+    }
+    writer.endObject();
+    writer.buffer()[std::min(writer.bufferSize(), writer.dataSize())] = 0;
+
+    if (Particle.connected())
+    {
+        Particle.publish(eventName, buf);
+        Log.info("publish %s %s", eventName, buf);
+    }
+    else
+    {
+        Log.info("button pressed but not cloud connected %s", buf);
+    }
+}
+```
+
+We don't really do anything with the subscription, but a log message is printed and can be seen if you are using `particle serial monitor` or other serial terminal program.
+
+Note that you should never publish and event from a subscription handler as they share an internal buffer and the data may become corrupted.
+
+```cpp
+void hookResponseHandler(const char *event, const char *data)
+{
+    Log.info("hook response %s", data);
+}
+```
+
+As mentioned above, the `button_click` may be run at interrupt time, and you should not do the actual publish from the handler. Instead, update a variable and handle the operation from `loop()`.
+
+```cpp
+// MODE button click handler
+void clickHandler(system_event_t event, int param)
+{
+    // int times = system_button_clicks(param);
+
+    // This can be called from an interrupt context so you can only use the small
+    // number of interrupt-safe functions here
+    buttonClicked = true;
+}
+```
 
 ### Clean-up
 
