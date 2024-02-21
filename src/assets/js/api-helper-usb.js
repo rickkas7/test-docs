@@ -60,7 +60,8 @@ $(document).ready(function () {
                 if (deviceRestoreInfo.versionsZipByPlatform[tempPlatformObj.name]) {
                     result = Object.assign({}, tempPlatformObj);
                     result.versionArray = deviceRestoreInfo.versionsZipByPlatform[tempPlatformObj.name];
-                    result.isTracker = (result.id == 26);
+                    result.isTracker = (result.id == 26 || result.id == 28);
+                    result.hasNCP = (result.id == 26) || (result.id == 12); // Tracker or Argon
                     result.isRTL872x = (result.mcu.startsWith('RTL872'));
                     result.isnRF52 = (result.mcu.startsWith('nRF52'));
                     result.isSTM32F2xx = (result.mcu.startsWith('STM32F2'));
@@ -104,7 +105,7 @@ $(document).ready(function () {
         }
 
         if (!navigator.usb) {
-			ga('send', 'event', eventCategory, 'No WebUSB', navigator.userAgent);
+			analytics.track('No WebUSB', {category:eventCategory, label:navigator.userAgent});
             $(selectElem).prop('disabled', true);
             setStatus(noWebUsbError);
             return;
@@ -293,7 +294,7 @@ $(document).ready(function () {
                 checkRestoreButtonEnable();
             }
             catch(e) {
-                ga('send', 'event', eventCategory, 'No WebUSB Device Selected');
+                analytics.track('No WebUSB Device Selected', {category:eventCategory});
                 setStatus('USB device not selected');                
                 console.log('no device selected', e);
             }        
@@ -468,7 +469,7 @@ $(document).ready(function () {
         const selectElem = $(thisPartial).find('.apiHelperUsbSetupDoneSelect');
 
         if (!navigator.usb) {
-			ga('send', 'event', eventCategory, 'No WebUSB', navigator.userAgent);
+			analytics.track('No WebUSB', {category:eventCategory, label:navigator.userAgent});
             $(selectElem).prop('disabled', true);
             setStatus(noWebUsbError);
             return;
@@ -506,7 +507,7 @@ $(document).ready(function () {
                     await dev.setSetupDone(true);
             
                     setStatus('Marked setup done for ' + typeIdStr + '!');    
-                    ga('send', 'event', eventCategory, 'Setup Done Success');
+                    analytics.track('Setup Done Success', {category:eventCategory});
                 }
                 else {
                     setStatus(typeIdStr + ' is in DFU mode.<br/>Put in normal operating mode, listening mode, or safe mode to mark setup done.');
@@ -516,11 +517,134 @@ $(document).ready(function () {
         
             }
             catch(e) {
-                ga('send', 'event', eventCategory, 'No WebUSB Device Selected');
+                analytics.track('No WebUSB Device Selected', {category:eventCategory});
                 console.log('no device selected', e);
             }        
         }));
     }));
+
+    $('.apiHelperUsbDeviceInfo').each(function() {
+        const thisPartial = $(this);
+        const gaCategory = 'UsbDeviceInfo';
+
+        const selectDeviceDivElem = $(thisPartial).find('.selectDeviceDiv');
+        const selectDeviceButtonElem = $(thisPartial).find('.selectDeviceButton');
+        const statusDivElem = $(thisPartial).find('.statusDiv');
+        const resultsDivElem = $(thisPartial).find('.resultsDiv');
+        const resultsTableBodyElem = $(resultsDivElem).find('table > tbody');
+        const browserErrorDivElem = $(thisPartial).find('.browserErrorDiv');
+        // const Elem = $(thisPartial).find('.');
+
+        if (!navigator.usb) {
+			analytics.track('No WebUSB', {category:gaCategory, label:navigator.userAgent});
+            $(selectDeviceButtonElem).prop('disabled', true);
+            $(browserErrorDivElem).show();
+            return;
+        }
+
+        const setStatus = function(s) {
+            $(statusDivElem).text(s);
+        }
+
+        const addResult = function(left, right) {
+            const trElem = document.createElement('tr');
+
+            {
+                const tdElem = document.createElement('td');
+                $(tdElem).text(left);
+                $(trElem).append(tdElem);    
+            }
+            {
+                const tdElem = document.createElement('td');
+                $(tdElem).text(right);
+                $(trElem).append(tdElem);    
+            }
+
+            $(resultsTableBodyElem).append(trElem);
+        };
+
+        $(selectDeviceDivElem).show();
+
+        $(selectDeviceButtonElem).on('click', async function() {
+            const gen3platforms = [
+                0x0c, // argon
+                0x0d, // boron
+                0x0f, // esomx
+                0x17, // bsom
+                0x19, // b5som
+                0x1a, // tracker
+            ];
+        
+            let filters = [
+                {vendorId: 0x2b04},
+            ];
+        
+            try {
+                $(resultsTableBodyElem).empty();
+
+                const usbDevice = await navigator.usb.requestDevice({ filters: filters })
+        
+                const dev = await ParticleUsb.openNativeUsbDevice(usbDevice, {});
+
+                setStatus('Getting device information...');
+
+                let info = {
+                    deviceId: dev._id,
+                };
+
+                $(resultsDivElem).show();
+                addResult('Device ID', info.deviceId);
+
+                
+                if (dev.isInDfuMode) {
+                    setStatus('When in DFU mode (blinking yellow), only the Device ID can be retrieved.');
+                    dev.close();
+                    return;
+                }
+
+                // dev._id
+
+                info.serial = await dev.getSerialNumber();
+                addResult('Serial Number', info.serial);
+
+                const skuObj = await apiHelper.getSkuObjFromSerial(info.serial);
+                if (skuObj) {
+                    info.sku = skuObj.name;
+                    info.skuDesc = skuObj.desc;
+                    addResult('SKU', info.sku + ' ' + info.skuDesc);
+                }
+
+                const platformObj = await apiHelper.getPlatformInfo(dev.platformId);
+                if (platformObj) {
+                    info.platformId = dev.platformId;
+                    info.platformName = platformObj.name;
+                    info.platformDisplayName = platformObj.displayName;
+                    
+                    addResult('Platform', info.platformDisplayName + ' (' + info.platformId + ')');
+                }
+
+                if (dev.isCellularDevice) {
+                    info.isCellularDevice = true;
+                    info.iccid = await dev.getIccid();
+                    addResult('ICCID', info.iccid);
+                }
+
+                apiHelper.manualSettings.setKeyObject('deviceSelect', info);
+
+                setStatus('');
+
+                dev.close();
+            }
+            catch(e) {
+                if (e.message.includes('No device selected')) {
+                    return;
+                }
+                setStatus('Failed to retrieve device information');
+                console.log('exception', e);
+            }
+        });
+
+    });
 
 
     if ($('.apiHelperUsbTest').each(function () {
@@ -556,4 +680,5 @@ $(document).ready(function () {
         });
 
 });
+
 

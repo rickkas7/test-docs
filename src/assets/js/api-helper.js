@@ -39,18 +39,64 @@ apiHelper.getDeviceRestoreInfo = function() {
     });
 };
 
+let carriersJsonRequests;
+let carriersJson;
+
+apiHelper.getCarriersJson = async function() {
+    return new Promise(function(resolve, reject) {
+        if (carriersJsonRequests == undefined) {
+            carriersJsonRequests = [];
+
+            fetch('/assets/files/carriers.json')
+            .then(response => response.json())
+            .then(function(res) {
+                carriersJson = res;
+    
+                // Resolve any promises waiting for this data
+                while(carriersJsonRequests.length) {
+                    carriersJsonRequests.pop()(res);
+                }
+            });
+        }
+
+        if (carriersJson) {
+            resolve(carriersJson);
+        }
+        else {
+            carriersJsonRequests.push(resolve);
+        }
+    });
+}
+
+apiHelper.getDeviceConstants = async function() {
+    const res = await apiHelper.getCarriersJson();    
+    if (res) {
+        return res.deviceConstants;
+    } 
+    else {
+        return null;
+    }
+}
+
+
 apiHelper.getPlatformInfo = async function(platformId) {
-    if (!deviceRestoreInfo) {
-        await apiHelper.getDeviceRestoreInfo();
+    const deviceConstants = await apiHelper.getDeviceConstants();
+    if (deviceConstants) {
+        for(const key in deviceConstants) {
+            if (deviceConstants[key].id == platformId) {
+                return deviceConstants[key];
+            }    
+        }    
     }
 
-    return deviceRestoreInfo.platforms.find(e => e.id == platformId);
+    return null;
 }
+
 
 apiHelper.getPlatformTitle = async function(platformId) {
     const info = await apiHelper.getPlatformInfo(platformId);
     if (info) {
-        return info.title;
+        return info.displayName;
     }
     else {
         return 'Unknown (' + platformId + ')';
@@ -65,6 +111,44 @@ apiHelper.getPlatformName = async function(platformId) {
     else {
         return platformId.toString();
     }
+}
+
+apiHelper.getSkuFromSerial = async function(serialNumber) {
+    if (!serialNumber) {
+        return null;
+    }
+    
+    const carriers = await apiHelper.getCarriersJson();    
+    if (!carriers) {
+        return null;
+    }
+    for(const skuObj of carriers.skus) {
+        if (skuObj.prefix) {
+            if (serialNumber.startsWith(skuObj.prefix)) {
+                return skuObj.name;
+            }
+        }
+    }
+    return null;
+}
+
+apiHelper.getSkuObjFromSerial = async function(serialNumber) {
+    if (!serialNumber) {
+        return null;
+    }
+    
+    const carriers = await apiHelper.getCarriersJson();    
+    if (!carriers) {
+        return null;
+    }
+    for(const skuObj of carriers.skus) {
+        if (skuObj.prefix) {
+            if (serialNumber.startsWith(skuObj.prefix)) {
+                return skuObj;
+            }
+        }
+    }
+    return null;
 }
 
 // Sorts the results from getPlatformName putting the real results first A-Z, then
@@ -91,6 +175,65 @@ apiHelper.platformNameSort = function(a, b) {
     else {
         return a.localeCompare(b);
     }
+}
+
+
+apiHelper.isDeviceId = function(str) {
+    const deviceIdRE = /^([A-Fa-f0-9]{24})$/;
+
+    return str.match(deviceIdRE) != null;
+};
+
+apiHelper.isSerialNumber = async function(str) {
+    const skuObj = await apiHelper.getSkuObjFromSerial(str);
+    return !!skuObj;
+};
+
+apiHelper.isICCID = function(str) {
+    // Whole token match because otherwise a Device ID matches this
+    const iccidRE = /^([0-9]{18,21})$/;
+
+    return str.match(iccidRE) != null;
+}
+
+apiHelper.parseDeviceLine = async function(line) {
+    let result = null;
+    for(let token of line.split(/[, ]/)) {
+        token = token.trim();
+
+        if (apiHelper.isICCID(token)) {
+            if (!result) {
+                result = {};
+            }
+            result.iccid = token;
+        }
+        else
+        if (apiHelper.isDeviceId(token)) {
+            if (!result) {
+                result = {};
+            }
+            result.deviceId = token;
+        }
+        else
+        if (await apiHelper.isSerialNumber(token)) {
+            if (!result) {
+                result = {};
+            }
+            result.serial = token;
+        }
+        else {
+            if (token.match(/[A-Z][A-Za-z0-9]+/)) {
+                // Allow things that might be a serial instead of ignoring them
+                if (!result) {
+                    result = {};
+                }
+                result.serial = token;    
+            }
+        }
+
+        // Possibly add support for mobile secret here
+    }
+    return result;
 }
 
 // Parses a semver (like '3.0.0-rc.1' and returns the broken out parts)
@@ -238,6 +381,122 @@ apiHelper.confirmFlash = function() {
     return true;
 }
 
+
+apiHelper.simpleTableRow = function(tbodyElem, key, value) {
+    const trElem = document.createElement('tr');
+
+    let tdElem;
+
+    tdElem = document.createElement('td');
+    $(tdElem).text(key);
+    $(trElem).append(tdElem);
+
+    tdElem = document.createElement('td');
+    $(tdElem).text(value);
+    $(trElem).append(tdElem);
+
+    $(tbodyElem).append(trElem);                
+}
+
+apiHelper.simpleTableObject = function(tbodyElem, obj) {
+    for(const key in obj) {
+        const value = obj[key];
+
+        apiHelper.simpleTableRow(tbodyElem, key, value);
+    }
+}
+
+apiHelper.simpleTableObjectMap = function(tbodyElem, keys, data) {
+    for(const key in keys) {
+        const label = keys[key];
+        apiHelper.simpleTableRow(tbodyElem, label, data[key]);
+    }
+
+}
+
+
+apiHelper.sandboxProducts = function() {
+    let sandboxProducts = {
+    };
+
+    sandboxProducts.get = function() {
+        return new Promise(function(resolve, reject) {      
+            if (sandboxProducts.result) {
+                resolve(result);
+            }
+            else
+            if (sandboxProducts.pending) {
+                sandboxProducts.pending.push({resolve, reject});
+            }
+            else {
+                sandboxProducts.pending = [];
+                sandboxProducts.pending.push({resolve, reject});
+
+                const request = {
+                    dataType: 'json',
+                    error: function (jqXHR) {
+                        delete sandboxProducts.result;
+                        sandboxProducts.pending.forEach(e => e.reject());
+                        delete sandboxProducts.pending;
+                    },
+                    headers: {
+                        'Authorization': 'Bearer ' + apiHelper.auth.access_token,
+                        'Accept': 'application/json'
+                    },
+                    method: 'GET',
+                    success: function (resp, textStatus, jqXHR) {
+                        sandboxProducts.result = resp.products;
+                        for(let p of sandboxProducts.result) {
+                            p.mine = (p.user == apiHelper.auth.username);
+                            p.sandbox = true;
+                        }
+                        sandboxProducts.pending.forEach(e => e.resolve(sandboxProducts.result));
+                        delete sandboxProducts.pending;
+                    },
+                    url: 'https://api.particle.io/v1/user/products/'
+                };
+    
+                $.ajax(request);
+            }
+        });    
+    }
+
+    sandboxProducts.getById = async function(id) {
+        await sandboxProducts.get();
+
+        if (sandboxProducts.result) {
+            return sandboxProducts.result.find(e => e.id == id);
+        }
+        return undefined;
+    }
+
+    sandboxProducts.getNameById = async function(id) {
+        const e = sandboxProducts.getById(id);
+        if (e) {
+            return e.name;
+        }
+        return '';
+    }
+    return sandboxProducts;
+}
+
+
+const tinkerFunctions = ['digitalread', 'digitalwrite', 'analogread', 'analogwrite'];
+
+apiHelper.deviceSupplementInfo = function(dev) {
+    dev.isTracker = (dev.platform_id == 26 || dev.platform_id == 28);
+
+    dev.isProductDevice = (dev.product_id > 100);
+
+    let tinkerFunctionCount = 0;
+    for(const s of tinkerFunctions) {
+        if (dev.functions.includes(s)) {
+            tinkerFunctionCount++;
+        }
+    }
+    dev.isTinker = (tinkerFunctionCount == tinkerFunctions.length);
+};
+
 apiHelper.deviceListRefresh = function(next) {
     if (apiHelper.fetchInProgress || !apiHelper.auth) {
         return;
@@ -252,6 +511,8 @@ apiHelper.deviceListRefresh = function(next) {
             apiHelper.deviceIdToName = {};
             apiHelper.deviceListCache.forEach(function(dev) {
                 apiHelper.deviceIdToName[dev.id] = dev.name;
+
+                apiHelper.deviceSupplementInfo(dev);
             });
 
             apiHelper.deviceListRefreshCallbacks.forEach(function(callback) {
@@ -286,41 +547,103 @@ apiHelper.deviceList = function(elems, options) {
     if (!options) {
         options = {};
     }
-    
+
+    let firstLoad = true;
+
     const updateList = function() {
-        let html = '';
-        if (options.hasAllDevices) {
-            const title = options.allDevicesTitle || 'All Devices';
-            html += '<option value="all">' + title + '</option>';
-        }
-        if (options.hasSelectDevice) {
-            const title = options.selectDeviceTitle || 'Select Device';
-            html += '<option value="select">' + title + '</option>';
-        }
-        if (options.hasRefresh) {
-            const title = options.refreshTitle || 'Refresh Device List';
-            html += '<option value="refresh">' + title + '</option>';
-        }
+        $(elems).each(function() {
+            const elem = $(this);
+            const oldValue = $(elem).val();
 
-        let first = true;
+            $(elem).empty();
+            
+            let optionElem;
 
-        apiHelper.deviceListCache.forEach(function(dev, index) {
-            if (!options.deviceFilter || options.deviceFilter(dev)) {
-                const value = options.getValue ? options.getValue(dev) : dev.id;
-                const title = options.getTitle ? options.getTitle(dev) : dev.name;
-                const sel = ((!options.hasSelectDevice) && !options.hasAllDevices && first) ? ' selected' : '';
-                first = false;
+            if (options.hasAllDevices) {
+                optionElem = document.createElement('option');
+                $(optionElem).attr('value', 'all');
+                $(optionElem).text(options.allDevicesTitle || 'All Devices');
+                $(elem).append(optionElem);
+            }
+            if (options.hasSelectDevice) {
+                optionElem = document.createElement('option');
+                $(optionElem).attr('value', 'select');
+                $(optionElem).text(options.selectDeviceTitle || 'Select Device');
+                $(elem).append(optionElem);
+            }
+            if (options.hasRefresh) {
+                optionElem = document.createElement('option');
+                $(optionElem).attr('value', 'refresh');
+                $(optionElem).text(options.refreshTitle || 'Refresh Device List');
+                $(elem).append(optionElem);
+            }
+    
+            let first = true;
+    
+            apiHelper.deviceListCache.forEach(function(dev, index) {
+                if (!options.deviceFilter || options.deviceFilter(dev)) {
+                    optionElem = document.createElement('option');
+                    $(optionElem).attr('value', options.getValue ? options.getValue(dev) : dev.id);
+                    $(optionElem).text(options.getTitle ? options.getTitle(dev) : dev.name);
 
-                html += '<option value="' + value + '"' + sel + '>' + title + '</option>';
+                    if ((!options.hasSelectDevice) && !options.hasAllDevices && first) {
+                        $(optionElem).attr('selected', 'selected');
+                    }
+                    first = false;
+    
+                    $(elem).append(optionElem);
+                }
+            });
+
+            if (apiHelper.deviceListCache.length == 0) {
+                optionElem = document.createElement('option');
+                $(optionElem).attr('value', 'none');
+                $(optionElem).text(options.noDevicesTitle || 'No devices in this account');
+
+                $(elem).append(optionElem);
+            }        
+            if (!firstLoad && oldValue && oldValue != 'refresh') {
+                $(elem).val(oldValue);
+            }
+            if (options.onUpdateList) {
+                options.onUpdateList();
+            }
+
+            firstLoad = false;
+        });
+    };
+
+    const refreshList = function() {
+        apiHelper.deviceListRefresh(function() {
+            updateList();
+            if (options.onUpdateInfo) {
+                options.onUpdateInfo();
             }
         });
-        if (apiHelper.deviceListCache.length == 0) {
-            const title = options.noDevicesTitle || 'No devices in this account';
-            html += '<option value="none">' + title + '</option>';
-        }
+    }
 
-        elems.html(html);
-    };
+
+
+    if (options.monitorEvents) {
+        apiHelper.eventViewer.addMonitor(function(event) {
+            if (typeof options.monitorEvents == 'function') {
+                options.monitorEvents(event);
+            }
+
+            switch(event.name) {
+                case 'spark/status':
+                    // event .name, data, .coreid
+                    // Wait a bit, then refresh the list to make sure the cloud has the right data
+                    setTimeout(function() {
+                        refreshList();
+                    }, 1000);
+                    break;
+
+                // case 'spark/flash/status':
+            }
+        });
+        apiHelper.eventViewer.start();
+    }
 
     apiHelper.deviceListRefreshCallbacks.push(updateList);
     
@@ -336,16 +659,34 @@ apiHelper.deviceList = function(elems, options) {
         });
     }
 
-    $(elems).on('change', function() {
+    $(elems).on('change', async function() {
         const val = $(this).val();
         if (val == 'refresh') {
-            apiHelper.deviceListRefresh(function() {
-            });
+            refreshList();
             return;
         }
+        if (options.hasSelectDevice) {
+            const selectOptionElem = $(this).find('option[value="select"]');
+            if (selectOptionElem.length) {
+                $(selectOptionElem).remove();           
+            }
+        }
 
-        if ($(this).hasClass('apiHelperCommonDevice')) {
-            apiHelper.setCommonDevice(val);
+        // Find the device in the cache
+        let dev = apiHelper.deviceListCache.find(e => e.id == val);
+        if (dev) {
+            if (dev.isProductDevice) {
+                const sandboxProducts = await apiHelper.sandboxProducts().get();
+    
+                dev.productInfo = sandboxProducts.find(e => e.id == dev.product_id);
+                            
+                dev.productDevInfo = (await apiHelper.particle.getDevice({ deviceId: dev.id, product: dev.product_id, auth: apiHelper.auth.access_token })).body;            
+            }
+    
+            if ($(this).hasClass('apiHelperCommonDevice')) {
+                apiHelper.setCommonDevice(val);
+            }
+    
         }
     });
 };
@@ -400,6 +741,11 @@ apiHelper.cachedResult = function() {
 
     cachedResult.queries = {};
 
+    cachedResult.clear = function() {
+        const cacheKey = JSON.stringify(opts);
+
+        cachedResult.queries[cacheKey].result = null;
+    };
 
     cachedResult.get = function(opts) {
         return new Promise(function(resolve, reject) {
@@ -442,13 +788,108 @@ apiHelper.cachedResult = function() {
     return cachedResult;
 }
 
+
+apiHelper.getTeamMembers = async function(options) {
+    // options
+    //      .orgId (optional)
+    //      .productId (optional, but usually required unless only getting the org team members)
+    // At least one must be specified
+    // If both are specified, then the results of both are combined
+
+    let results = [];
+
+    if (!apiHelper.auth) {
+        return results;
+    }
+
+    const addTeam = async function(fnOptions = {}) {
+        const res = await $.ajax({
+            dataType: 'json',
+            headers: {
+                'Accept':'application/json',
+                'Authorization': 'Authorization: Bearer ' + apiHelper.auth.access_token
+            },
+            method: 'GET',
+            url: fnOptions.url,
+        });   
+        if (res && res.ok) {
+            for(let obj of res.team) {
+                if (options.noProgrammatic) {
+                    if (obj.is_programmatic) {
+                        continue;   
+                    }
+                }
+                if (fnOptions.isOrg) {
+                    obj.isOrg = true;
+                }
+                results.push(obj);
+            }
+        }
+
+    }
+
+    if (options.orgId) {
+        await addTeam({isOrg: true, url: 'https://api.particle.io/v1/orgs/' + options.orgId + '/team'});
+    }
+    
+    if (options.productId) {
+        await addTeam({url: 'https://api.particle.io/v1/products/' + options.productId + '/team'});
+    }
+
+    results.sort(function(a, b) {
+        return a.username.localeCompare(b.username);
+    })
+
+    return results;
+}
+
+apiHelper.updateTeamSelect = function(options) {
+    // options
+    //      .elem select element to add to (required)
+    //      .team array from getTeamMembers (required)
+    //      .noEmpty Do not empty the select element before adding new team members
+
+    if (!options.noEmpty) {
+        $(options.elem).empty();
+    }
+    let added = {};
+
+    for(const obj of options.team) {
+        if (added[obj.username]) {
+            continue;
+        }
+        added[obj.username] = true;
+
+        const optionElem = document.createElement('option');
+
+        $(optionElem).attr('value', obj.username);
+
+        let append = [];
+        if (obj.role && obj.role.isOwner) {
+            append.push('Product Owner');
+        }
+        else
+        if (obj.isOrg) {
+            append.push('Organization Team Member');
+        }
+
+        let appendStr = '';
+        if (append.length) {
+            appendStr = ' (' + append.join(', ') + ')';
+        }
+        $(optionElem).text(obj.username + appendStr);
+
+        $(options.elem).append(optionElem);
+    }
+}
+
 apiHelper.getProductsCache = apiHelper.cachedResult();
 
-apiHelper.getProducts = async function() {
+apiHelper.getProducts = async function(options = {}) {
     if (!apiHelper.auth) {
         return { products: [] };
     }
-    return await apiHelper.getProductsCache.get({
+    const reqOptions = {
         dataType: 'json',
         headers: {
             'Accept':'application/json',
@@ -456,16 +897,21 @@ apiHelper.getProducts = async function() {
         },
         method: 'GET',
         url: 'https://api.particle.io/v1/user/products/'
-    });    
+    };
+    if (options.clearCache) {
+        apiHelper.getProductsCache.clear(reqOptions); 
+    }
+
+    return await apiHelper.getProductsCache.get(reqOptions);    
 };
 
 apiHelper.getOrgsCache = apiHelper.cachedResult();
 
-apiHelper.getOrgs = async function() {
+apiHelper.getOrgs = async function(options = {}) {
     if (!apiHelper.auth) {
         return { organizations: [] };
     }
-    return await apiHelper.getOrgsCache.get({
+    const reqOptions = {
         dataType: 'json',
         headers: {
             'Accept':'application/json',
@@ -473,14 +919,19 @@ apiHelper.getOrgs = async function() {
         },
         method: 'GET',
         url: 'https://api.particle.io/v1/orgs/'
-    });
+    };
+    if (options.clearCache) {
+        apiHelper.getOrgsCache.clear(reqOptions); 
+    }
+
+    return await apiHelper.getOrgsCache.get(reqOptions);
 };
 
 
 apiHelper.getOrgProductsCache = apiHelper.cachedResult();
 
-apiHelper.getOrgProducts = async function(org) {
-    return await apiHelper.getOrgProductsCache.get({
+apiHelper.getOrgProducts = async function(org, options = {}) {
+    const reqOptions = {
         dataType: 'json',
         headers: {
             'Accept':'application/json',
@@ -488,7 +939,12 @@ apiHelper.getOrgProducts = async function(org) {
         },
         method: 'GET',
         url: 'https://api.particle.io/v1/orgs/' + org + '/products/'
-    });    
+    };
+    if (options.clearCache) {
+        apiHelper.getOrgProductsCache.clear(reqOptions); 
+    }
+
+    return await apiHelper.getOrgProductsCache.get(reqOptions);    
 };
 
 
@@ -508,8 +964,24 @@ apiHelper.filterByPlatformId = function(array, platformId) {
     return results;
 };
 
+apiHelper.filterByPlatformIdArray = function(array, platformIdArray) {
+    let results = [];
+
+    for(const obj of array) {
+        if (platformIdArray.includes(obj.platform_id)) {
+            results.push(obj);
+        }
+    }
+
+    results.sort(function(a, b) {
+        return a.name.localeCompare(b.name);
+    });
+
+    return results;
+};
+
 apiHelper.filterByTrackerPlatform = function(array) {
-    return apiHelper.filterByPlatformId(array, 26);
+    return apiHelper.filterByPlatformIdArray(array, [26, 28]);
 };
 
 apiHelper.unclaimDevice = async function(deviceId) {
@@ -559,10 +1031,11 @@ apiHelper.monitorUsage = function(options) {
         if (resultObj.timer) {
             clearInterval(resultObj.timer);
             resultObj.timer = null;
-            ga('send', 'event', options.eventCategory, 'Finished');
+            analytics.track('Finished', {category:options.eventCategory});
         }
     };
 
+    /*
     resultObj.timer = setInterval(function() {
 
         let durationMinutesStr = Math.floor((Date.now() - resultObj.startMs) / 60000).toString(); 
@@ -570,10 +1043,11 @@ apiHelper.monitorUsage = function(options) {
             durationMinutesStr = '000000'.substr(0, 6 - durationMinutesStr.length) + durationMinutesStr;
         }
 
-        ga('send', 'event', options.eventCategory, options.actionPrefix + durationMinutesStr);
+        analytics.track(options.actionPrefix + durationMinutesStr, {category:options.eventCategory});
     }, periodMinutes * 60000);
-
-    ga('send', 'event', options.eventCategory, 'Started');
+    */
+   
+    analytics.track('Started', {category:options.eventCategory});
 
     return resultObj;
 };
@@ -711,4 +1185,5 @@ $(document).ready(function() {
 
 
 });
+
 

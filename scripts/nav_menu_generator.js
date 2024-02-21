@@ -64,6 +64,9 @@ function generateNavMenu(files, fileName, contentDir) {
                     if (item.tiles) {
                         tileItem = item;
                     }
+                    if (item.hidden || item.internal) {
+                        fileObj.noIndex = true;
+                    }
                 }
 
                 if (item.isSection) {
@@ -119,7 +122,8 @@ function generateNavMenu(files, fileName, contentDir) {
     if (!fileObj.navigation) {
         // The navigation data is inserted using {{{navigation}}} in all layouts to generate the
         // navigation menu. It's passed verbatim, with no additional processing in the layout template.
-        fileObj.navigation = generateNavHtml(menuJson);
+        // Used to call this  generateNavHtml(menuJson) to generate it statically, but now generates at runtime and fills in this div.
+        fileObj.navigation = '<div class="navMenuOuter"></div>';
     }
 
     // sectionTitle is used for the page titles in the HTML <head> generated from head.hbs
@@ -127,191 +131,6 @@ function generateNavMenu(files, fileName, contentDir) {
 }
 
 
-function insertIntoMenu(menuJson, outerMenuJson, insertLoc) {
-    let resultMenuJson = {
-        items: []
-    };
-    let useNextArray = false;
-
-    const processArray = function(a, dest) {
-        for(const e of a) {
-            if (Array.isArray(e)) {
-                if (useNextArray) {
-                    useNextArray = false;
-                    dest.push(menuJson);
-                }
-                else {
-                    let a2 = [];
-                    processArray(e, a2);
-                    dest.push(a2);
-                }
-            }
-            else {
-                dest.push(e);
-                if (e.insertLoc == insertLoc) {
-                    useNextArray = true;
-                }
-            }
-        }
-    }
-    processArray(outerMenuJson.items, resultMenuJson.items);
-
-    return resultMenuJson;
-};
-
-
-function generateNavHtml(menuJson) {
-    // console.log('base=' + fileObj.path.base + ' topLevelName=' + topLevelName + ' sectionName=' + sectionName);
-
-    let nav = '';
-
-    const makeTitle = function (item) {
-        let title = item.title || titleize(item.dir);
-
-        title = title.replace('&', '&amp;');
-
-        return title;
-    };
-
-    const makeNavMenu2 = function (item, indent) {
-        let html = '';
-
-        html += '<div class="navContainer ' + (item.addClass ? item.addClass : '') + '">';
-
-        if (indent) {
-            html += '<div style="width:' + indent * 15 + 'px;">&nbsp;</div>'; // Replacement for navIndent2
-        }
-
-        if (item.activeItem) {
-            html += '<div class="navActive2">' + makeTitle(item) + '</div>';
-            html += '<div class="navPlusMinus"><i class="ion-minus"></i></div>';
-        }
-        else {
-            html += '<div class="navMenu2"><a href="' + item.href + '" class="navLink">' + makeTitle(item) + '</a></div>';
-        }
-
-        html += '</div>'; // navContainer
-
-        if (item.activeItem) {
-            html += '<div id="navActiveContent"></div>';
-        }
-
-        return html;
-    };
-
-    nav += '<div class="navMenuOuter">';
-
-    let itemsFlat = [];
-    let cardSections = [];
-    let noSeparator = false;
-
-    const processArray = function(array, indent) {
-        let hasActiveItem = false;
-        // console.log('processArray indent=' + indent, array);
-
-        for (const item of array) {
-            if (item.isCardSection) {
-                nav += '<div class="navContainer ' + (item.addClass ? item.addClass : '') + '">';
-                if (indent) {
-                    nav += '<div style="width:' + indent * 15 + 'px;">&nbsp;</div>'; // Replacement for navIndent2
-                }
-                nav += '<div class="navMenu2"><a href="' + item.href + '" class="navLink">' + makeTitle(item) + '</a></div>';
-                nav += '</div>'; // navContainer
-                cardSections.push(item);
-                //itemsFlat.push(item);
-            }
-            else if (item.isSection) {
-                // Multi-level section title
-                nav += '<div class="navContainer ' + (item.addClass ? item.addClass : '') + '">';
-                if (indent) {
-                    nav += '<div style="width:' + indent * 15 + 'px;">&nbsp;</div>'; // Replacement for navIndent2
-                }
-                if (item.href) {
-                    nav += '<div class="navMenu1"><a href="' + item.href + '" class="navLink">' + makeTitle(item) + '</a></div></div>';
-                }
-                else {
-                    nav += '<div class="navMenu1">' + makeTitle(item) + '</div></div>';
-                }
-                if (item.noSeparator) {
-                    noSeparator = true;
-                }
-            }
-            else if (Array.isArray(item)) {
-                // Multi-level (like tutorials, reference, datasheets)
-                processArray(item, indent + 1);
-
-                if (noSeparator) {
-                    noSeparator = false;
-                }
-                else {
-                    nav += '<div class="navSectionSpacer"></div>';
-                }
-                
-            }
-            else 
-            if (item.activeItem || !item.hidden) {
-                nav += makeNavMenu2(item, indent);
-                itemsFlat.push(item);
-            }
-
-            if (item.activeItem) {
-                hasActiveItem = true;
-            }
-        }
-        if (hasActiveItem && cardSections.length > 0) {
-            cardSections[cardSections.length - 1].activeSection = true;
-        }
-
-    };
-    processArray(menuJson.items, 0);
-
-
-    nav += '</div>'; // navMenuOuter
-
-    // Generate keyboard and swipe navigation directions for this page
-    // This can be removed after fully migrated to using the new apiIndexJson
-    /*
-    let navigationInfo = {};
-    let itemFound = false;
-
-    for(let ii = 0; ii < itemsFlat.length; ii++) {
-        if (itemsFlat[ii].activeItem) {
-            if (ii > 0) {
-                navigationInfo.prevLink = itemsFlat[ii - 1].href;
-            }
-            if ((ii + 1) < itemsFlat.length) {
-                navigationInfo.nextLink = itemsFlat[ii + 1].href;
-            }
-            itemFound = true;
-            break;
-        }
-    }
-    if (!itemFound && itemsFlat.length >= 2) {
-        navigationInfo.nextLink = itemsFlat[1].href;
-    }
-
-    itemFound = false;
-    for(let ii = 0; ii < cardSections.length; ii++) {
-        if (cardSections[ii].activeSection) {
-            if (ii > 0) {
-                navigationInfo.prevGroup = cardSections[ii - 1].href;
-            }
-            if ((ii + 1) < cardSections.length) {
-                navigationInfo.nextGroup = cardSections[ii + 1].href;
-            }
-            itemFound = true;
-            break;
-        }
-    }
-    if (!itemFound && cardSections.length >= 2) {
-        navigationInfo.nextGroup = cardSections[1].href;
-    }
-
-    nav += '\n<script>navigationInfo=' + JSON.stringify(navigationInfo) + '</script>\n';
-    */
-
-    return nav;
-}
 
 /*
 fileObj {
@@ -358,16 +177,6 @@ function metalsmith(options) {
             generateNavMenu(files, fileName, contentDir);
         });
 
-        /*
-        // This doesn't quite work as planned because the active items are hardcoded in it, though
-        // it might be possible to fix from Javascript
-        Object.keys(files).forEach(function (fileName) {
-            if (fileName.startsWith('reference/device-os/api/')) {
-                // Replace this navigation with the full navigation
-                files[fileName].navigation = files['reference/device-os/firmware.md'].navigation;
-            }
-        });
-        */
 
         done();
     };
@@ -375,6 +184,4 @@ function metalsmith(options) {
 
 module.exports = {
     metalsmith,
-    generateNavHtml,
-    insertIntoMenu
 };

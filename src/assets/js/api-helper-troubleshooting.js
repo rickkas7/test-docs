@@ -37,6 +37,12 @@ $(document).ready(function () {
         const ticketFormDataUrl = '/assets/files/ticketForms.json';
         const environmentUrl = '/assets/files/environment.json';
 
+        let partialOptions = [];
+        const partialOptionsStr = $(thisPartial).data('options');
+        if (partialOptionsStr) {
+            partialOptions = partialOptionsStr.split(',');
+        }
+         
         const urlParams = new URLSearchParams(window.location.search);
 
         const parser = new DOMParser();
@@ -58,6 +64,10 @@ $(document).ready(function () {
         let pageStack = [];
 
         const updateUrl = function() {
+            if (partialOptions.includes('noUpdateUrl')) {
+                return;
+            }
+
             let query = '?p=';
             for(const p of pageStack) {
                 query += p.page + ','
@@ -106,12 +116,15 @@ $(document).ready(function () {
                     pageObj.ticketForm = pageOptions.page;
                 }
             }
+            if (pageObj.doNotRestore && pageOptions.loadPath) {
+                return false;
+            }
             if (!pageObj) {
-                ga('send', 'event', gaCategory, 'invalidPage', pageOptions.page);
+                analytics.track('invalidPage', {category:gaCategory, label:pageOptions.page});
                 return false;
             }
             if (pageStack.find(e => e.page == pageOptions.page)) {
-                ga('send', 'event', gaCategory, 'pageLoop', pageOptions.page);
+                analytics.track('pageLoop', {category:gaCategory, label:pageOptions.page});
                 return false;
             }
             pageObj.curEnvironment = Object.assign({}, getParentEnvironment());
@@ -124,7 +137,7 @@ $(document).ready(function () {
                 return template(pageObj.curEnvironment);
             }
 
-            ga('send', 'event', gaCategory, 'showPage', pageOptions.page);
+            analytics.track('showPage', {category:gaCategory, label:pageOptions.page});
 
             const pageDivElem = document.createElement('div');
             $(pageDivElem).data('page', pageOptions.page);
@@ -390,11 +403,13 @@ $(document).ready(function () {
             }
 
             if (pageObj.ticketForm) {
-                addField({
-                    title: 'Subject',
-                    type: 'text',
-                    field: 'subject',
-                });
+                if (!pageObj.subjectValue) {
+                    addField({
+                        title: 'Subject',
+                        type: 'text',
+                        field: 'subject',
+                    });    
+                }
                 addField({
                     title: 'Description',
                     type: 'textarea',
@@ -563,7 +578,7 @@ $(document).ready(function () {
 
 
                 const buttonElem = submitButton = document.createElement('button');
-                $(buttonElem).text('Submit support request');
+                $(buttonElem).text(pageObj.submitButtonTitle ? pageObj.submitButtonTitle : 'Submit support request');
                 $(pageDivElem).append(buttonElem);
 
                 $(buttonElem).on('click', async function() {
@@ -606,6 +621,14 @@ $(document).ready(function () {
                             });
                         }
                     }
+                    if (pageObj.subjectValue) {
+                        options.customFields.push({
+                            id: 22020244,
+                            value: pageObj.subjectValue
+                        });
+                    }
+
+                    
 
                     console.log('options', options);
 
@@ -613,12 +636,12 @@ $(document).ready(function () {
                         const resp = await apiHelper.ticketSubmit(options);
                         // console.log('resp', resp);
 
-                        ga('send', 'event', gaCategory, 'ticketSubmitSuccess', pageObj.ticketForm);
+                        analytics.track('ticketSubmitSuccess', {category:gaCategory, label:pageObj.ticketForm});
                         showPage({page: 105}); // Ticket submitted
                     }
                     catch(e) {
                         console.log('exception submitting ticket');
-                        ga('send', 'event', gaCategory, 'ticketSubmitError', pageObj.ticketForm);
+                        analytics.track('ticketSubmitError', {category:gaCategory, label:pageObj.ticketForm});
                         showPage({page: 106}); // Ticket error
                     }
                     
@@ -679,6 +702,13 @@ $(document).ready(function () {
                     if (buttonObj.nonOrgRequired && !!apiHelper.selectedOrg) {
                         continue;
                     }
+                    if (buttonObj.enterpriseRequired) {
+                        if (!apiHelper.orgInfo || !apiHelper.orgInfo.isEnterprise) {
+                            // Not enterprise
+                            continue;
+                        }
+                    }
+
                     if (buttonObj.hidden) {
                         continue;
                     }
@@ -728,7 +758,7 @@ $(document).ready(function () {
     
                             if (buttonObj.loginService) {
                                 const curPage = window.location.href;
-                                ga('send', 'event', gaCategory, 'loginService', buttonObj.loginService);
+                                analytics.track('loginService', {category:gaCategory, label:buttonObj.loginService});
                                 window.location.href = 'https://login.particle.io/' + buttonObj.loginService + '?redirect=' + curPage;                        
                             }
                             else
@@ -737,7 +767,7 @@ $(document).ready(function () {
                             }
                             else
                             if (buttonObj.url) {
-                                ga('send', 'event', gaCategory, 'buttonUrl', buttonObj.url);
+                                analytics.track('buttonUrl', {category:gaCategory, label:buttonObj.url});
                                 window.location.href = buttonObj.url;                        
                             }
                         });
@@ -822,9 +852,11 @@ $(document).ready(function () {
             validateForm();
             updateConditions();
 
-            // Scroll new page into view
-            const pos = $(pageDivElem).position().top;
-            $('.content-inner').scrollTop(pos);
+            if (!partialOptions.includes('noScroll')) {
+                // Scroll new page into view
+                const pos = $(pageDivElem).position().top;
+                $('.content-inner').scrollTop(pos);
+            }
             
             if (!pageOptions.noUpdateUrl) {
                 updateUrl();
@@ -913,3 +945,4 @@ $(document).ready(function () {
 
     }));
 });
+

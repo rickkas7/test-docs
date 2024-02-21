@@ -4,6 +4,26 @@ $(document).ready(function() {
         return;
     }
 
+    const trochees = [
+        'aardvark', 'bacon', 'badger', 'banjo', 'bobcat', 'boomer', 'captain', 'chicken', 'cowboy', 'cracker',
+        'cranky', 'crazy', 'dentist', 'doctor', 'dozen', 'easter', 'ferret', 'gerbil', 'hacker', 'hamster', 'hindu',
+        'hobo', 'hoosier', 'hunter', 'jester', 'jetpack', 'kitty', 'laser', 'lawyer', 'mighty', 'monkey', 'morphing',
+        'mutant', 'narwhal', 'ninja', 'normal', 'penguin', 'pirate', 'pizza', 'plumber', 'power', 'puppy', 'ranger',
+        'raptor', 'robot', 'scraper', 'scrapple', 'station', 'tasty', 'trochee', 'turkey', 'turtle', 'vampire',
+        'wombat', 'zombie'];
+
+
+    apiHelper.getRandomTrochee = function() {
+        const arr = trochees;
+        const parts = [];
+        for (let i = 0; i < 2; i++) {
+            const a = Math.floor(Math.random() * arr.length);
+            parts.push(arr[a]);
+        }
+        return parts.join('_');
+    };
+
+
     if ($('.apiHelperLedFunctionTest').length > 0 && apiHelper.auth) {
         apiHelper.deviceList($('.apiHelperLedFunctionTestSelect'), {
             deviceFilter: function(dev) {
@@ -27,14 +47,14 @@ $(document).ready(function() {
 
             apiHelper.particle.callFunction({ deviceId, name: 'led', argument: cmd, auth: apiHelper.auth.access_token  }).then(
                 function (data) {
-                    ga('send', 'event', 'LED Function Test', 'Success');
+                    analytics.track('Success', {category:'LED Function Test'});
                     setStatus('Success! (' + data.body.return_value + ')');
                     setTimeout(function() {
                         setStatus('');
                     }, 4000);                
                 },
                 function (err) {
-                    ga('send', 'event', 'LED Function Test', 'Error', err);
+                    analytics.track('Error', {category:'LED Function Test', label:err});
                     setStatus('Error: ' + err);
                     setTimeout(function() {
                         setStatus('');
@@ -76,14 +96,14 @@ $(document).ready(function() {
 
             apiHelper.particle.callFunction({ deviceId, name: 'setColor', argument: cmd, auth: apiHelper.auth.access_token  }).then(
                 function (data) {
-                    ga('send', 'event', 'LED Color Test', 'Success');
+                    analytics.track('Success', {category:'LED Color Test'});
                     setStatus('Success! (' + data.body.return_value + ')');
                     setTimeout(function() {
                         setStatus('');
                     }, 4000);                
                 },
                 function (err) {
-                    ga('send', 'event', 'LED Color Test', 'Error', err);
+                    analytics.track('Error', {category:'LED Color Test', label:err});
                     setStatus('Error: ' + err);
                     setTimeout(function() {
                         setStatus('');
@@ -371,6 +391,7 @@ $(document).ready(function() {
         const listOrgProducts = function(index) {
             if (index >= orgList.length) {
                 displayList();
+                setStatus('');
                 return;
             }
 
@@ -595,12 +616,27 @@ $(document).ready(function() {
                 try {
                     const deviceData = await apiHelper.particle.getDevice({ deviceId: options.deviceId, auth: apiHelper.auth.access_token });
         
-                    currentOutput('\u2705 Yes!'); // green check
                     deviceLookup.deviceFound = true;
                     deviceLookup.deviceInfo = deviceData.body;      
-                    deviceLookup.deviceMine = true;  // Device is claimed to the account currently logged into
 
                     deviceLookup.isProductDevice = (deviceLookup.deviceInfo.product_id > 100);
+                    if (deviceLookup.isProductDevice) {
+                        // Need to check the owner field as the non-product API can return information about 
+                        // devices you have access to that are not claimed to your account
+                        deviceLookup.isProductDevice = true;
+                        deviceLookup.deviceProductId = deviceLookup.deviceInfo.product_id;
+                        deviceLookup.deviceMine = (deviceLookup.deviceInfo.owner == apiHelper.auth.username);
+                    }
+                    else {
+                        // Non-product devices can only be claimed to your own account
+                        deviceLookup.deviceMine = true;
+                    }
+                    if (deviceLookup.deviceMine) {
+                        currentOutput('\u2705 Yes!'); // green check
+                    }
+                    else {
+                        currentOutput('\u274C No'); // red x
+                    }
                 }
                 catch(e) {
                     currentOutput('\u274C No'); // red x
@@ -615,54 +651,40 @@ $(document).ready(function() {
                 };
 
                 try {
-                    const productsData = await apiHelper.getProducts();
-    
-                    let foundInProduct = false;
-    
-                    for(const product of productsData.products) {
-                        if (deviceLookup.deviceMine && deviceLookup.isProductDevice) {
-                            if (product.id != deviceLookup.deviceInfo.product_id) {
-                                // Skip this product
-                                continue;
-                            }
-                        }
-                        if (deviceLookup.options.platformId) {
-                            if (product.platform_id != deviceLookup.options.platformId) {
-                                continue;
-                            }
-                        }
+                    const productRes = await apiHelper.particle.getProduct({ 
+                        product: deviceLookup.deviceProductId,
+                        auth: apiHelper.auth.access_token 
+                    });
 
-                        try {
-                            const deviceData = await apiHelper.particle.getDevice({ deviceId: options.deviceId, product: product.id, auth: apiHelper.auth.access_token });
-            
-                            if (deviceData.body.product_id == product.id) {
-            
-                                currentOutput('\u2705 ' + product.name + ' (' + product.id + ') Yes!<br/>'); // green check
-                                foundInProduct = true;
-                                deviceLookup.deviceFound = true;
-                                deviceLookup.deviceInfo = deviceData.body;
-                                deviceLookup.deviceProductName = product.name;
-                                deviceLookup.deviceProductId = product.id;
-                                deviceLookup.deviceInMyProduct = true; // Device is in a product owned by this account (sandbox)
-                                deviceLookup.isProductDevice = true;
-                                break;
-                            }
-                        }
-                        catch(e) {
-                        }
+                    // console.log('productRes', productRes);
+                    // body.product.
+                    //  id, name, description, device_count, groups[], etc.
+                    //  org, organization_id
+    
+                    foundInProduct = true;
+                    deviceLookup.productInfo = productRes.body.product;
+                    deviceLookup.deviceFound = true;
+                    deviceLookup.deviceProductName = deviceLookup.productInfo.name;
 
-                        if (!foundInProduct) {
-                            currentOutput('\u274C ' + product.name + ' (' + product.id + ')<br/>'); // red x
-                        }
-        
+                    if (deviceLookup.productInfo.org) {
+                        deviceLookup.deviceInOrgProduct = true; // In an product in an org I have access to
+                        deviceLookup.orgId = deviceLookup.productInfo.organization_id;
+                        deviceLookup.orgName = deviceLookup.productInfo.org;    
+                        currentOutput('\u2705 ' + deviceLookup.deviceProductName + ' (' + deviceLookup.deviceProductId + ') Yes (organization ' + deviceLookup.orgName + ')!<br/>'); // green check
                     }
-       
+                    else {
+                        deviceLookup.deviceInMyProduct = true; // Device is in a product owned by this account (sandbox)
+                        currentOutput('\u2705 ' + deviceLookup.deviceProductName + ' (' + deviceLookup.deviceProductId + ') Yes (sandbox)!<br/>'); // green check
+                    }
     
                 }
                 catch(e) {
+                    // This should never happen
+                    console.log('exception', e);
+                    currentOutput('\u274C No'); // red x
                 }
             }
-
+            /*
             if ((!deviceLookup.deviceFound || deviceLookup.isProductDevice) && !options.modeNoCheckOrgs) {
 
                 const currentOutput = function(status) {
@@ -732,6 +754,7 @@ $(document).ready(function() {
                 catch(e) {
                 }
             }
+            */
 
             if (deviceLookup.deviceInfo) {
                 const currentOutput = function(label, value) {
@@ -1182,1101 +1205,671 @@ $(document).ready(function() {
 
     });
     
-    $('.apiHelperDeviceRemove').each(function() {
+    $('.apiHelperDeviceSelect').each(async function() {
         const thisPartial = $(this);
-        const gaCategory = 'deviceRemove';
-
-        const deviceTextAreaElem = $(thisPartial).find('.deviceTextArea');
-        const productSelectElem = $(thisPartial).find('.apiHelperProductSelect');
-
-        const removeFromProductRowElem = $(thisPartial).find('.removeFromProductRow');
-        const removeFromProductElem = $(thisPartial).find('.removeFromProduct');
-        const unclaimDeviceElem = $(thisPartial).find('.unclaimDevice');
-        const releaseSimRowElem = $(thisPartial).find('.releaseSimRow');
-        const releaseSimElem = $(thisPartial).find('.releaseSim');
-        const actionButtonElem = $(thisPartial).find('.actionButton');
-        const statusElem = $(thisPartial).find('.apiHelperStatus');
-        const logDivElem = $(thisPartial).find('.logDiv');
-        const logTextAreaElem = $(thisPartial).find('.logDiv > textarea');
-
-        const deviceTableDivElem = $(thisPartial).find('.deviceTableDiv');
-        const deviceTableElem = $(deviceTableDivElem).find('table');
-        const deviceTableBodyElem = $(deviceTableElem).find('tbody');
-
-        const executeButtonElem = $(thisPartial).find('.executeButton');
-        const sandboxUnclaimWarningElem = $(thisPartial).find('.sandboxUnclaimWarning');
         
+        const options = $(thisPartial).data('options').split(',');
 
-        const setStatus = function(s) {
-            $(statusElem).text(s);
-        }
-        const appendLog = function(s) {
-            const textNode = document.createTextNode(s);
-            $(logDivElem).append(textNode, document.createElement('br'));
-        }
+        const deviceSelectSelectElem = $(thisPartial).find('.deviceSelectSelect');
 
-        let deviceList;
-        let deviceInfoMap = {};
-        let simInfoMap = {};
-        let userInfo = {
-            productIndex: {},
-            productDevices: {}
+        let deviceSelect = {
+            options,
+            partialElem: thisPartial,
+            selectElem: deviceSelectSelectElem,
         };
+        $(thisPartial).data('deviceSelect', deviceSelect);
 
-        const checkDeviceList = function() {
-            const deviceListRaw = $(deviceTextAreaElem).val();
+        apiHelper.deviceList(deviceSelectSelectElem, {
+            deviceFilter: function(dev) {
+                return true;
+            },
+            getTitle: function(dev) {
+                let result;
 
-            const deviceIdRE = /([a-f0-9]{24})/gi;
-
-            deviceList = deviceListRaw.match(deviceIdRE);
-            if (deviceList && deviceList.length) {
-                $(actionButtonElem).prop('disabled', false);
-                setStatus(deviceList.length + ' device IDs entered');
-            }
-            else {
-                $(actionButtonElem).prop('disabled', true);
-                setStatus('No device IDs in box');
-            }
-        };
-
-        const checkExecuteButton = function(options) {
-            let enableExecute = false;
-
-
-
-            if (options.productId && options.removeFromProduct) {
-                for(const deviceId in deviceInfoMap) {
-                    if (!deviceInfoMap[deviceId].notFound) {
-                        enableExecute = true;
-                    }
-                }
-            }
-
-            $(sandboxUnclaimWarningElem).hide();
-
-            if (options.unclaimDevice) {
-                let hasDevice = false;
-
-                for(const deviceId in deviceInfoMap) {
-                    const unclaimElem = deviceInfoMap[deviceId].unclaimElem;
-
-                    if (deviceInfoMap[deviceId].owner) {
-                        enableExecute = true;
-                        hasDevice = true;
-                        $(unclaimElem).text('');
-                    }
-                    else {
-                        $(unclaimElem).text('No');
-                    }
-                }    
-
-                if (!options.productId && hasDevice) {
-                    $(sandboxUnclaimWarningElem).show();
-                }            
-            }
-            else {
-
-                for(const deviceId in deviceInfoMap) {
-                    const unclaimElem = deviceInfoMap[deviceId].unclaimElem;
-                    $(unclaimElem).text('No');
-                }
-            }
-
-            if (options.releaseSim) {
-
-                for(const iccid in simInfoMap) {
-                    const releaseElem = simInfoMap[iccid].releaseElem;
-
-                    if (!simInfoMap[iccid].notFound) {
-                        enableExecute = true;
-                        $(releaseElem).text('');    
-                    }
-                    else {
-                        $(releaseElem).text('No');                        
-                    }
-                }                 
-            }
-            else {
-                for(const iccid in simInfoMap) {
-                    const releaseElem = simInfoMap[iccid].releaseElem;
-                    $(releaseElem).text('No');
-                }
-            }
-
-            $(executeButtonElem).prop('disabled', !enableExecute)
-
-        };
-
-        const addColumns = function(infoObj, columns) {
-            for(const col of columns) {
-                colElemKey = col + 'Elem';
-
-                const tdElem = infoObj[colElemKey] = document.createElement('td');
-
-                if (infoObj[col]) {
-                    $(tdElem).text(infoObj[col]);
-                }
-
-                $(infoObj.rowElem).append(tdElem);
-            }
-        };
-
-
-        const checkOperations = async function(options) {
-            $(deviceTableBodyElem).html('');
-            $(deviceTableDivElem).show();
-
-            try {
-
-
-                let hasSim = false;
-
-                // 
-                for(const deviceId of options.deviceList) {
-                    let deviceInfo;
-
-                    try {
-                        if (options.productId) {
-                            // Unclaim product device
-                            deviceInfo = (await apiHelper.particle.getDevice({ deviceId, product:options.productId, auth: apiHelper.auth.access_token })).body;
-                        }
-                        else {
-                            // Unclaim developer device
-                            deviceInfo = (await apiHelper.particle.getDevice({ deviceId, auth: apiHelper.auth.access_token })).body;
-                        }        
-                    }
-                    catch(e) {
-                        console.log('exception getting deviceInfo for ' + deviceId);
-                    }
-
-                    if (!deviceInfo) {
-                        deviceInfo = {
-                            id: deviceId,
-                            notFound: true
-                        }
-                    }
-
-                    {
-                        const rowElem = deviceInfo.rowElem = document.createElement('tr');
-
-                        deviceInfo.deviceId = deviceInfo.id;
-                        
-                        addColumns(deviceInfo, ['deviceId', 'name', 'owner', 'iccid']);
-
-                        if (deviceInfo.notFound) {
-                            if (options.productId) {
-                                // $(deviceInfo.removeStatusElem).text('Device not found in product');
-                            }
-                            else {
-                                // $(deviceInfo.removeStatusElem).text('Device not found in sandbox');                                
-                            }
-                        }
-                        if (deviceInfo.cellular && deviceInfo.iccid) {
-                            hasSim = true;
-                        }
-                                                                
-                        $(deviceTableBodyElem).append(rowElem);
-
-                        deviceInfoMap[deviceId] = deviceInfo;        
-                    }
-                }
-
-                if (hasSim) {
-                    $(releaseSimRowElem).show();
+                if (dev.name) {
+                    result = dev.name;
                 }
                 else {
-                    $(releaseSimRowElem).hide();
+                    result = dev.id;
                 }
-                setStatus('Device and SIM check complete!');
-
-                $(logTextAreaElem).val('');
-                $(logDivElem).hide();
-
-                ga('send', 'event', gaCategory, 'Check Success');
-
-                checkExecuteButton(options);
-            }
-            catch(e) {
-                console.log('exception', e);
-                ga('send', 'event', gaCategory, 'Check Error');
-            }
-
-        };
-
-        const appendLogLine = function(s) {
-            const old = $(logTextAreaElem).val();
-
-            $(logTextAreaElem).val(old + s + '\n');
-        }
-
-        const executeOperations = async function(options) {
-            try {
-                let hasErrors = false;
-
-                $(logDivElem).show();
-
-                let stats = {};
-
-                if (options.productId) {
-                    stats.product = true;
+                result += (dev.online ? '' : ' (offline)');
+                return result;
+            },                    
+            hasRefresh: true,
+            hasSelectDevice: true,
+            onChange: async function(elem) {
+                const newVal = $(elem).val();
+                deviceSelect.dev = apiHelper.deviceListCache.find(e => e.id == newVal);
+                if (deviceSelect.onChange) {
+                    deviceSelect.onChange(deviceSelect.dev);
                 }
-                else {
-                    stats.sandbox = true;
-                }
+                if (options.includes('deviceInfo')) {
+                    const deviceSelectInfoElem = $(thisPartial).find('.deviceSelectInfo');
+                    const tbodyElem = $(deviceSelectInfoElem).find('tbody');
+                    $(deviceSelectInfoElem).show();
+                    $(tbodyElem).empty();
 
-                const deviceCount = Object.keys(deviceInfoMap).length;
-                let deviceNum = 1;
-
-                for(const deviceId in deviceInfoMap) {
-                    setStatus('Processing device ' + deviceNum + ' of ' + deviceCount);
-                    deviceNum++;
-
-                    appendLogLine(deviceId + ' (' + deviceInfoMap[deviceId].name + ')');
-
-                    if (deviceInfoMap[deviceId].notFound) {
-                        if (options.productId) {
-                            appendLogLine('  Not found in product  ' + options.productId + ' ****');
-                        }
-                        else {
-                            appendLogLine('  Not found in developer sandbox ' + ' ****');
-                        }
-                        continue;
+                    deviceSelect.dev._platform = await apiHelper.getPlatformName(deviceSelect.dev.platform_id);
+                    deviceSelect.dev._sku = await apiHelper.getSkuFromSerial(deviceSelect.dev.serial_number);
+                    if (!deviceSelect.dev._sku) {
+                        deviceSelect.dev._sku = 'Unknown';
                     }
+                    console.log('deviceInfo', deviceSelect.dev);
 
-                    const iccid = deviceInfoMap[deviceId].iccid;
-                    if (options.releaseSim && iccid) {
-                        try {
-                            if (options.productId) {
-                                // Remove product SIM
-                                await apiHelper.particle.removeSIM({ iccid, product:options.productId, auth: apiHelper.auth.access_token });
-                            }
-                            else {
-                                // Remove developer SIM
-                                await apiHelper.particle.removeSIM({ iccid, auth: apiHelper.auth.access_token });
-                            }
-                            stats.release = stats.release ? stats.release + 1 : 1;
-                            appendLogLine('  Release SIM success ' + iccid);
-                        }
-                        catch(e) {
-                            console.log('exception', e);
-                            appendLogLine('  Release SIM failed ' + iccid + ' *****');
-                            hasErrors = true;
-                            stats.errors = stats.errors ? stats.errors + 1 : 1;
-                        }
-    
-                    }
-                    if (options.unclaimDevice && deviceInfoMap[deviceId].owner) {
-                        const unclaimElem = deviceInfoMap[deviceId].unclaimElem;
+                    let tableData = {
+                        'id': 'Device ID',
+                        'name': 'Device Name',
+                        '_platform': 'Platform',
+                        'serial_number': 'Serial Number',
+                        '_sku': 'SKU',          
+                        'product_id': 'Product ID',                                       
+                    };
 
-                        try {
-                            if (options.productId) {
-                                // Unclaim product device
-                                await apiHelper.particle.removeDeviceOwner({ deviceId, product:options.productId, auth: apiHelper.auth.access_token });
-                            }
-                            else {
-                                // Unclaim developer device
-                                await apiHelper.particle.removeDevice({ deviceId, auth: apiHelper.auth.access_token });
-                            }    
-                            appendLogLine('  Unclaim success ' + deviceInfoMap[deviceId].owner);
-                            stats.unclaim = stats.unclaim ? stats.unclaim + 1 : 1;
-                            // $(unclaimElem).html('&#x2705'); // green check
-                        }
-                        catch(e) {
-                            console.log('exception', e);
-                            appendLogLine('  Unclaim failed ' + deviceInfoMap[deviceId].owner + ' ****');
-                            // $(unclaimElem).html('&#x274c'); // red x
-                            hasErrors = true;
-                            stats.errors = stats.errors ? stats.errors + 1 : 1;
-                        }
-                    }
-
-                    if (options.productId && options.removeFromProduct) {
-                        // Remove from product
-                        try {
-                            await apiHelper.particle.removeDevice({ deviceId, product:options.productId, auth: apiHelper.auth.access_token });
-
-                            appendLogLine('  Remove from product ' + options.productId + ' success ');
-                            stats.remove = stats.remove ? stats.remove + 1 : 1;
-                        }
-                        catch(e) {
-                            console.log('exception', e);
-                            appendLogLine('  Remove from product ' + options.productId + ' failed ' + ' ****');
-                            hasErrors = true;
-                            stats.errors = stats.errors ? stats.errors + 1 : 1;
-                        }
-                    }
+                    apiHelper.simpleTableObjectMap(tbodyElem, tableData, deviceSelect.dev);
                     
-
-                }                
-             
-                if (!hasErrors) {
-                    setStatus('All operations completed successfully!');
-                } 
-                else {
-                    setStatus('Operations completed, but errors occurred');
+                    $(thisPartial).trigger('deviceSelected', [deviceSelect.dev]);
                 }
-
-                $(actionButtonElem).prop('disabled', false);
-                ga('send', 'event', gaCategory, 'Execute Success', JSON.stringify(stats));
             }
-            catch(e) {
-                console.log('exception', e);
-                ga('send', 'event', gaCategory, 'Execute Error');
-            }
-        }
-
-        const getOptions = function() {
-            let options = $(thisPartial).data('getOptions')();
-
-            options.removeFromProduct = (options.productId != 0) && $(removeFromProductElem).prop('checked'),
-            options.unclaimDevice = $(unclaimDeviceElem).prop('checked');
-            options.releaseSim = $(releaseSimElem).prop('checked');
-            options.username = apiHelper.auth.username;
-            options.accessToken = apiHelper.auth.access_token;
-            options.deviceList = deviceList;
-
-            return options;
-        }
-
-        $(thisPartial).on('updateProductList', async function(event, options) {
-            switch(options.devOrProduct) {
-                case 'product':
-                    $(removeFromProductRowElem).show();
-                    break;
-
-                case 'dev':
-                    $(removeFromProductRowElem).hide();
-                    break;                    
-
-            }
-        });
-
-
-        $(removeFromProductElem).on('click', function() {
-            checkExecuteButton(getOptions());
-        })
-        $(unclaimDeviceElem).on('click', function() {
-            checkExecuteButton(getOptions());
-        })
-        $(releaseSimElem).on('click', function() {
-            checkExecuteButton(getOptions());
-        })
-
-        
-
-        $(deviceTextAreaElem).on('input', function() {
-            checkDeviceList();
-        });
-
-        $(actionButtonElem).on('click', function() {
-    
-            $(actionButtonElem).prop('disabled', true);
-
-            checkOperations(getOptions());
-        });
-
-        $(executeButtonElem).on('click', function() {
-            $(executeButtonElem).prop('disabled', true);
-    
-            // Hide all warning panes
-            $(sandboxUnclaimWarningElem).hide();
-
-            executeOperations(getOptions());
-        });
-
-        $(productSelectElem).on('click', function() {
-            checkDeviceList();
-        });
-
+        });   
 
     });
 
-    $('.apiHelperListDevices').each(function() {
+    $('.apiHelperFlashTinker').each(async  function() {
         const thisPartial = $(this);
-        const gaCategory = 'listDevices';
 
-        const productOrSandboxSelectorElem = $(thisPartial).find('.apiHelperProductOrSandboxSelector');
-        const productSelectElem = $(thisPartial).find('.apiHelperProductSelect');
-        const actionButtonElem = $(thisPartial).find('.actionButton');
-
-        const deviceTableDivElem = $(thisPartial).find('.deviceTableDiv');
-        const deviceTableElem = $(deviceTableDivElem).find('table');
-        const deviceTableHeadElem = $(deviceTableElem).find('thead');
-        const deviceTableBodyElem = $(deviceTableElem).find('tbody');
-        
-        const statusElem = $(thisPartial).find('.apiHelperStatus');
-
-        const progressDivElem = $(thisPartial).find('.progressDiv');
-        const progressElem = $(progressDivElem).find('progress');
-
-        const downloadDivElem = $(thisPartial).find('.downloadDiv');
-        const formatSelectElem = $(thisPartial).find('.formatSelect');
-        const includeHeaderCheckboxElem = $(thisPartial).find('.includeHeaderCheckbox');
-        const dateFormatSelectElem = $(thisPartial).find('.dateFormatSelect');
-        const downloadButtonElem = $(thisPartial).find('.downloadButton');
-        const copyButtonElem = $(thisPartial).find('.copyButton');
-
-        const fieldSelectorElem = $(thisPartial).find('.apiHelperFieldSelector');
-
-        if (!apiHelper.auth) {
-            // Not logged in
-            $(thisPartial).hide();
-            return;
-        }
-
-        let deviceList;
-
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams) {
-            const formatParam = urlParams.get('format');
-            if (formatParam) {
-                $(formatSelectElem).val(formatParam);
-            }
-            const headerParam = urlParams.get('header');
-            if (headerParam !== null) {
-                $(includeHeaderCheckboxElem).prop('checked', !!headerParam);
-            }
-            const dateFormatParam = urlParams.get('dateFormat');
-            if (dateFormatParam) {
-                $(dateFormatSelectElem).val(dateFormatParam);
-            }
-
-        }
+        const apiHelperCloudDeviceSelectElem = $(thisPartial).find('.apiHelperCloudDeviceSelect');
+        const flashTinkerButtonElem = $(thisPartial).find('.flashTinkerButton');
+        const apiHelperStatusElem = $(thisPartial).find('.apiHelperStatus');
+        const flashControlsElem = $(thisPartial).find('.flashControls');
+        const warningMessageElem = $(thisPartial).find('.warningMessage');
 
         const setStatus = function(s) {
-            $(statusElem).text(s);
+            $(apiHelperStatusElem).text(s);
         }
-
-        const getOptions = function() {
-            
-            let options = $(productOrSandboxSelectorElem).data('getOptions')();
-
-            options.format = $(formatSelectElem).val();
-            options.header = $(includeHeaderCheckboxElem).prop('checked');
-            options.dateFormat = $(dateFormatSelectElem).val();
-
-            options.username = apiHelper.auth.username;
-            options.accessToken = apiHelper.auth.access_token;
-
-            return options;
-        }
-
-        const clearDeviceList = function() {
-            $(deviceTableBodyElem).html('');
-            $(deviceTableDivElem).hide();
-            $(downloadDivElem).hide();
-        };
-
-        const updateSearchParam = function() {
-    
-            try {
-                const options = getOptions();
-
-                let urlConfig = $(fieldSelectorElem).data('getUrlConfigObj')();
-
-                urlConfig = Object.assign($(productOrSandboxSelectorElem).data('getUrlConfigObj')(), urlConfig);
-                
-                urlConfig.format = options.format;
-                urlConfig.header = options.header;
-                urlConfig.dateFormat = options.dateFormat;
-                
-                const searchStr = $.param(urlConfig);
-    
-                history.pushState(null, '', '?' + searchStr);     
-
-                $(copyButtonElem).prop('disabled', (options.format == 'xlsx'));
-            }
-            catch(e) {
-                console.log('exception', e);
-            }
-        };
-
-        const getTableData = function(configObj, options) {
-
-            let tableData = {
-                keys:[],
-                titles:[],
-                widths:[],
-                indexFor: {}
-            }
-            
-            if (options.export && options.format == 'deviceId') {
-                tableData.keys.push('id');
-            }
-            else
-            if (options.export && options.format == 'iccid') {
-                tableData.keys.push('iccid');                
-            }
-            else {
-                for(field of configObj.fields) {
-                    if (field.isChecked()) {
-                        tableData.keys.push(field.key);
-                        tableData.titles.push(field.customTitle ? field.customTitle : field.title);
-                        tableData.widths.push(parseInt(field.customWidth ? field.customWidth : field.width));
-                        tableData.indexFor[field.key] = tableData.keys.length - 1;
-                    }
-                }    
-            }
-
-            if (deviceList) {
-                tableData.data = [];
-
-                for(const deviceInfo of deviceList) {
-                    let d = {};
-
-                    if (options.export && options.format == 'iccid' && !deviceInfo['iccid']) {
-                        continue;
-                    }
-
-                    for(const key of tableData.keys) {
-                        if (typeof deviceInfo[key] !== 'undefined') {
-                            if (Array.isArray(deviceInfo[key])) {
-                                // Occurs for groups and functions
-                                d[key] = deviceInfo[key].join(' ');
-    
-                                // TODO: Also handle object for variables. Maybe boolean as we well
-                            }
-                            else {
-                                let value = deviceInfo[key];
-
-                                if (options.convertDates) {
-                                    if (key == 'last_heard' || key == 'last_handshake_at' ) {
-                                        value = new Date(value);
-                                    }
-                                }
-
-                                d[key] = value;
-                            }
-                        }
-                    }
-                    tableData.data.push(d);
-                }    
-            }
-
-            // TODO: Filtering of desired rows
-            // TODO: Date formatting
-
-            return tableData;
-        } 
-
-        const refreshTable = function(configObj) {            
-            // 
-            const tableData = getTableData(configObj, getOptions());
-
-            $(deviceTableHeadElem).html('');
-            {
-                const rowElem = document.createElement('tr');
-                let col = 0;
-                for(const title of tableData.titles) {
-                    const thElem = document.createElement('th');
-                    $(thElem).text(title);
-                    $(rowElem).append(thElem);
-                }
-                $(deviceTableHeadElem).append(rowElem);
-            }
-
-            $(deviceTableBodyElem).html('');
-
-            if (tableData.data) {
-                $(downloadDivElem).show();
-
-                for(const d of tableData.data) {
-                    const rowElem = document.createElement('tr');
-    
-                    for(let col = 0; col < tableData.keys.length; col++) {
-                        const key = tableData.keys[col];
-
-                        const tdElem = document.createElement('td');
-                        $(tdElem).css('width', tableData.widths[col] + 'ch');
-        
-                        if (d[key]) {
-                            $(tdElem).text(d[key]);
-                        }
-        
-                        $(rowElem).append(tdElem);
-                    }
-    
-                    $(deviceTableBodyElem).append(rowElem);
-    
-                }
-            }
-            else {
-                $(downloadDivElem).hide();
-            }
-        };
-
-        const getDeviceList = async function(options) {
-            $(deviceTableBodyElem).html('');
-            $(deviceTableDivElem).show();
-
-            try {
-                let stats = {
-                    product: (options.productId != 0)
-                };
-
-                // 
-                setStatus('Getting device list...');
-                $(progressDivElem).show();
-
-                deviceList = await apiHelper.getAllDevices({
-                    productId: options.productId,
-                    owner: options.username,
-                    progressElem: progressElem
-                });
-
-                $(progressDivElem).hide();
-
-                stats.count = deviceList.length;
-
-                setStatus('Device list retrieved!');
-
-                refreshTable($(fieldSelectorElem).data('getConfigObj')());
-
-                ga('send', 'event', gaCategory, 'Get Devices Success', JSON.stringify(stats));
-            }
-            catch(e) {
-                console.log('exception', e);
-                ga('send', 'event', gaCategory, 'Get Devices Error');
-            }
-
-        };
-
-        $(actionButtonElem).on('click', function() {
-            getDeviceList(getOptions());
-        });
-
-        $(productSelectElem).on('change', function() {
-            clearDeviceList();
-            updateSearchParam();
-        });
-
-        $(thisPartial).on('updateProductList', async function(event, options) {
-            clearDeviceList();
-            updateSearchParam();
-        });
-
-        $(thisPartial).on('fieldSelectorUpdate', async function(event, config) {
-            refreshTable(config);
-            updateSearchParam();
-        });
-
-
-        $(formatSelectElem).on('change', function() {
-            updateSearchParam();
-        });
-        $(dateFormatSelectElem).on('change', function() {
-            updateSearchParam();
-        });
-
-        $(includeHeaderCheckboxElem).on('click', function() {
-            updateSearchParam();
-        });
-
-        const getXlsxData = function(options) {
-            if (!options) {
-                options = {};
-            }
-            if (!options.sheetName) {
-                options.sheetName = 'Devices';
-            }
-            let xlsxData = {};
-
-            xlsxData.options = getOptions();
-
-            xlsxData.configObj = $(fieldSelectorElem).data('getConfigObj')();
-
-            let getTableDataOptions = getOptions();
-
-            getTableDataOptions.convertDates = (xlsxData.options.dateFormat != 'iso');
-            getTableDataOptions.export = true;
-
-            xlsxData.tableData = getTableData(xlsxData.configObj, getTableDataOptions);
-
-            let conversionOptions = {
-                header: xlsxData.tableData.keys
-            };
-            if (!xlsxData.options.header) {
-                conversionOptions.skipHeader = true;
-            }
-            if (xlsxData.options.dateFormat != 'iso') {
-                conversionOptions.dateNF = xlsxData.options.dateFormat;
-            }
-
-            if (!options.fileName) {
-                switch(xlsxData.options.format) {
-                    case 'deviceId':
-                        options.fileName = 'devices.txt';
-                        conversionOptions.skipHeader = true;
-                        break;
-
-                    case 'iccid':
-                        options.fileName = 'iccids.txt';
-                        conversionOptions.skipHeader = true;
-                        break;
-
-                    default:
-                        options.fileName = 'devices.' + xlsxData.options.format;
-                        break;
-                }
-            }
-            let stats = {
-                format: xlsxData.options.format,
-                cols: xlsxData.tableData.keys.length,
-                count: xlsxData.tableData.data.length
-            };
-
-
-            xlsxData.worksheet = XLSX.utils.json_to_sheet(xlsxData.tableData.data, conversionOptions);
-
-            xlsxData.workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(xlsxData.workbook, xlsxData.worksheet, options.sheetName);
-
-            if (xlsxData.options.header) {
-                XLSX.utils.sheet_add_aoa(xlsxData.worksheet, [xlsxData.tableData.titles], { origin: "A1" });
-            }
-
-            // Columns widths
-            if (!xlsxData.worksheet['!cols']) {
-                xlsxData.worksheet['!cols'] = [];
-            }
-            for(let ii = 0; ii < xlsxData.tableData.widths.length; ii++) {
-                if (!xlsxData.worksheet['!cols'][ii]) {
-                    xlsxData.worksheet['!cols'][ii] = {};
-                }
-                xlsxData.worksheet['!cols'][ii].wch = xlsxData.tableData.widths[ii];
-            }
-
-            switch(xlsxData.options.format) {
-                case 'xlsx':
-                    // toFile/toClipboard is ignored; cannot create 
-                    XLSX.writeFile(xlsxData.workbook, options.fileName);
-                    ga('send', 'event', gaCategory, 'Download', JSON.stringify(stats));
-                    break;
-
-                case 'deviceId':
-                case 'iccid':
-                case 'csv':
-                    xlsxData.textOut = XLSX.utils.sheet_to_csv(xlsxData.worksheet);
-                    break;
-
-                case 'tsv':
-                    xlsxData.textOut = XLSX.utils.sheet_to_csv(xlsxData.worksheet, {FS:'\t'});
-                    break;
-            }
-            if (xlsxData.textOut) {
-                if (options.toClipboard) {
-                    var t = document.createElement('textarea');
-                    document.body.appendChild(t);
-                    $(t).text(xlsxData.textOut);
-                    t.select();
-                    document.execCommand("copy");
-                    document.body.removeChild(t);
-
-                    ga('send', 'event', gaCategory, 'Clipboard', JSON.stringify(stats));
-                }
-                if (options.toFile) {
-                    let blob = new Blob([xlsxData.textOut], {type:'text/' + xlsxData.options.format});
-                    saveAs(blob, options.fileName);	        
-                    ga('send', 'event', gaCategory, 'Download', JSON.stringify(stats));
-                }
-            }
-
-            return xlsxData;
-        }
-
-        $(downloadButtonElem).on('click', function() {
-            getXlsxData({toFile: true});
-
-        });
-
-        $(copyButtonElem).on('click', function() {
-            getXlsxData({toClipboard: true});
-            
-        });
-
-
-    });
-
-    $('.apiHelperFieldSelector').each(function() {
-        const thisPartial = $(this);
-
-        const configElem = $(thisPartial).find('textarea');
-        const configText = configElem.text();
-        // console.log('configText', configText);
-        let configObj = JSON.parse(configText);
-        $(configElem).replaceWith('');
-
-        for(const field of configObj.fields) {
-            if (!field.width) {
-                field.width = '10';
-            }
-        }
-
-        // console.log('configObj', configObj);
-
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('k0')) {
-            let newFields = [];
-
-            for(let index = 0; ; index++) {
-                let key = urlParams.get('k' + index);
-                if (!key) {
-                    break;
-                }
-                let checked = false;    
-                if (key.startsWith('*')) {
-                    checked = true;
-                    key = key.substring(1);
-                }
-
-                const field = configObj.fields.find(f => f.key == key);
-                if (field) {
-                    field.checked = checked;
-                    const customTitle = urlParams.get('t' + index);
-                    if (customTitle) {
-                        field.customTitle = customTitle;
-                    }
-                    const customWidth = urlParams.get('w' + index);
-                    if (customWidth) {
-                        field.customWidth = customWidth;
-                    }
-                    newFields.push(field);
-                }
-            }
-
-            for(const field of configObj.fields) {
-                const inNew = !!newFields.find(f => f.key == field.key);
-                if (!inNew) {
-                    field.checked = false;
-                    newFields.push(field);
-                }
-            }
-
-            // Add in other non-selected fields
-            configObj.fields = newFields;
-        }
-
-
-        const refreshTable = function() {   
-            $(thisPartial).trigger('fieldSelectorUpdate', [configObj]);
-        };
-
-        const moveField = function(fromKey, toKey, afterTarget) {
-            let fromIndex = -1;
-            let toIndex = -1;
-            for(let ii = 0; ii < configObj.fields.length; ii++) {
-                if (configObj.fields[ii].key == fromKey) {
-                    fromIndex = ii;
-                }
-                if (configObj.fields[ii].key == toKey) {
-                    toIndex = ii;
-                }
-            }
-
-            if (fromIndex == toIndex || fromIndex < 0 || toIndex < 0) {
+         
+        const updateInfo = async function() {
+            const newVal = $(apiHelperCloudDeviceSelectElem).val();
+            if (newVal == 'select' || newVal == 'refresh') {
+                $(flashTinkerButtonElem).prop('disabled', true);      
                 return;
             }
 
-            // Reorder items in the DOM
-            $(configObj.fields[fromIndex].trElem).detach();
-            if (afterTarget) {
-                $(configObj.fields[toIndex].trElem).after(configObj.fields[fromIndex].trElem);
+            const dev = apiHelper.deviceListCache.find(e => e.id == newVal);
 
+            const platformInfo = await apiHelper.getPlatformInfo(dev.platform_id);
+
+            $('.apiHelperTinker').trigger('updateInfo', [{dev, platformInfo}]);
+
+            const deviceKind = platformInfo ? platformInfo.displayName : 'Device';
+
+            let canFlash = true;
+            
+            if (dev.isTracker) {
+                setStatus('Tinker functionality is not available on the Tracker.');
+                $(flashControlsElem).hide();
+            }
+            else
+            if (dev.isTinker) {
+                if (dev.online) {
+                    setStatus(deviceKind + ' is online and appears to be running Tinker firmware.');
+                }
+                else {
+                    setStatus(deviceKind + ' was last running Tinker firmware, but is currently offline.');
+                    // canFlash = false; // Once automatic online status change works, uncomment this line
+                }
+                $(flashControlsElem).hide();
+            }
+            else 
+            if (dev.productInfo && dev.productDevInfo) {
+                const prefix = deviceKind + ' is in product ' + dev.productInfo.name + ' (' + dev.productInfo.id + ') '; 
+                if (dev.productDevInfo.development) {
+                    if (dev.online) {
+                        setStatus(prefix + 'and is a development device so it can be used');
+                    }
+                    else {
+                        setStatus(prefix + 'and is a development device so it could be used, but is currently offline');  
+                        // canFlash = false; // Once automatic online status change works, uncomment this line
+                    }
+                    $(flashControlsElem).show();
+                }
+                else {
+                    setStatus(prefix + 'but is not a development device so it can be used');
+                    canFlash = false;                    
+                    $(flashControlsElem).hide();
+                }
             }
             else {
-                $(configObj.fields[toIndex].trElem).before(configObj.fields[fromIndex].trElem);
-
+                if (dev.online) {
+                    setStatus(deviceKind + ' is online and can be flashed with Tinker firmware');
+                }
+                else {
+                    setStatus(deviceKind + ' is offline, make sure it is powered on and breathing cyan.');
+                    // canFlash = false; // Once automatic online status change works, uncomment this line
+                }
+                $(flashControlsElem).show();
             }
+            $(flashTinkerButtonElem).prop('disabled', !canFlash);      
 
-            // Reorder items in array
-            const fromArrayItem = configObj.fields[fromIndex];
-            configObj.fields.splice(fromIndex, 1);
-            if (toIndex > fromIndex) {
-                toIndex--;
-            }
-            if (afterTarget) {
-                toIndex++;
-            }
-            configObj.fields.splice(toIndex, 0, fromArrayItem);
-
-            //console.log('fields', configObj.fields);
-            refreshTable();
-            
-        };
-
-        const tableElem = document.createElement('table');
-        {
-            $(tableElem).addClass('apiHelperTableNoMargin');
-
-            {
-                const theadElem = document.createElement('thead');
-                const trElem = document.createElement('tr');
-
-                {
-                    // Drag to reorder
-                    const thElem = document.createElement('th');
-                    $(thElem).text('Reorder');
-                    $(trElem).append(thElem);
-                }
-                {
-                    const thElem = document.createElement('th');
-                    $(thElem).text('Include');
-                    $(trElem).append(thElem);
-                }
-                {
-                    const thElem = document.createElement('th');
-                    $(thElem).text('Column Name');
-                    $(trElem).append(thElem);
-                }
-                {
-                    const thElem = document.createElement('th');
-                    $(thElem).text('Key');
-                    $(trElem).append(thElem);
-                }
-                {
-                    const thElem = document.createElement('th');
-                    $(thElem).text('Width');
-                    $(trElem).append(thElem);
-                }
-
-                $(theadElem).append(trElem);
-
-                $(tableElem).append(theadElem);
-            }
-
-            const tbodyElem = document.createElement('tbody');
-
-            for(const field of configObj.fields) {
-                const trElem = field.trElem = document.createElement('tr');
-
-                let tdElem;
-
-                // Drag icon
-                tdElem = document.createElement('td');
-                $(tdElem).attr('style', 'vertical-align: middle !important');
-                const imgElem = document.createElement('img');
-                $(imgElem).attr('src', '/assets/images/drag-handle-black.png');
-                $(imgElem).attr('width', '20');
-                $(imgElem).attr('height', '20');
-                $(imgElem).attr('style', 'margin:0px !important');
-                $(imgElem).attr('draggable', 'true');
-                $(imgElem).on('dragstart', function(ev) {
-                    ev.originalEvent.dataTransfer.setData('text', field.key);
-                });
-                $(tdElem).append(imgElem);
-                trElem.append(tdElem);
-
-                // Checkbox
-                tdElem = document.createElement('td');
-                $(tdElem).attr('style', 'vertical-align: middle !important');
-
-                const checkboxElem = document.createElement('input');
-                $(checkboxElem).prop('type', 'checkbox');
-                if (field.checked) {
-                    $(checkboxElem).prop('checked', 'checked');
-                }
-                $(checkboxElem).on('click', function() {
-                    refreshTable();
-                });
-                $(tdElem).append(checkboxElem);
-                trElem.append(tdElem);
-
-                field.isChecked = function() {
-                    return $(checkboxElem).prop('checked');
-                };
-
-                // Field Name
-                tdElem = document.createElement('td');
-                $(tdElem).attr('style', 'vertical-align: middle !important');
-
-                const titleInputElem = document.createElement('input');
-                $(titleInputElem).attr('type', 'text');
-                $(titleInputElem).attr('value', field.customTitle ? field.customTitle : field.title);
-                $(titleInputElem).on('blur', function() {
-                    field.customTitle = $(titleInputElem).val();
-                    refreshTable();
-                });
-                $(tdElem).append(titleInputElem);
-                trElem.append(tdElem);
-
-                // Key
-                tdElem = document.createElement('td');
-                $(tdElem).attr('style', 'vertical-align: middle !important');
-                $(tdElem).text(field.key);
-                $(tdElem).on('click', function() {
-                    $(checkboxElem).trigger('click');
-                });
-                trElem.append(tdElem);
-
-                // Width
-                tdElem = document.createElement('td');
-                const widthInputElem = document.createElement('input');
-                $(widthInputElem).attr('type', 'text');
-                $(widthInputElem).attr('value', field.customWidth ? field.customWidth : field.width); 
-                $(widthInputElem).attr('size', '5'); 
-                $(widthInputElem).on('blur', function() {
-                    field.customWidth = $(widthInputElem).val();                    
-                    refreshTable();
-                });
-                $(tdElem).append(widthInputElem);
-                trElem.append(tdElem);
-
-
-                $(trElem).on('dragover', function(ev) {
-                    const key = ev.originalEvent.dataTransfer.getData("text");                    
-                    if (key != field.key) {
-                        ev.preventDefault();
-                    }
-                });
-                $(trElem).on('drop', function(ev) {
-                    const key = ev.originalEvent.dataTransfer.getData("text");                    
-                    console.log('ev', ev);
-
-                    const targetClientHeight = ev.currentTarget.clientHeight;
-                    const afterTarget = (ev.originalEvent.offsetY >= (targetClientHeight / 2));
-
-                    moveField(key, field.key, afterTarget);
-                });
-    
-
-                $(tbodyElem).append(trElem);
-            }
-
-            $(tableElem).append(tbodyElem);
         }
 
-        $(thisPartial).append(tableElem);
 
-        $(thisPartial).data('getConfigObj', function() {
-            return configObj;
-        });
+        apiHelper.deviceList(apiHelperCloudDeviceSelectElem, {
+            deviceFilter: function(dev) {
+                return true;
+            },
+            getTitle: function(dev) {
+                let result;
 
-        $(thisPartial).data('getUrlConfigObj', function() {
-            let resultObj = {};
-            let index = 0;
-
-            for(const field of configObj.fields) {
-
-                resultObj['k' + index] = (field.isChecked() ? '*' : '') + field.key;
-                    
-                if (field.customTitle && field.customTitle != field.title) {
-                    resultObj['t' + index] = field.customTitle;
+                if (dev.name) {
+                    result = dev.name;
                 }
-
-                if (field.customWidth && field.customWidth != field.width) {
-                    resultObj['w' + index] = field.customWidth;
+                else {
+                    result = dev.id;
                 }
+                let attributes = [];
+                if (!dev.online) {
+                    attributes.push('offline');                    
+                }
+                if (dev.isProductDevice) {
+                    attributes.push('product');                    
+                }
+                if (dev.isTracker) {
+                    attributes.push('tracker');     
+                }
+                if (dev.isTinker) {
+                    attributes.push('tinker');                    
+                }
+                if (attributes.length) {
+                    result += ' (' + attributes.join(', ') + ')';
+                }                            
+                return result;
+            },                    
+            hasRefresh: true,
+            hasSelectDevice: true,
+            monitorEvents: function(event) {
+                switch(event.name) {
+                    case 'spark/flash/status':
+                        // This event has a trailing space on the data
+                        if (event.data.trim() == 'success') {
+                            setStatus('Flash successful, waiting for device to restart and reconnect to the cloud');
+                        }
+                        break;
 
-                index++;
+                    case 'spark/status':
+                        break;
+                }
+            },
+            onChange: async function(elem) {
+                updateInfo();
+            },
+            onUpdateInfo: async function(elem) {
+                updateInfo();
+            },
+
+        });   
+
+        $(flashTinkerButtonElem).on('click', async function() {
+            let deviceRestoreInfo = await apiHelper.getDeviceRestoreInfo();
+
+            $(flashTinkerButtonElem).prop('disabled', true);
+            $(warningMessageElem).hide();
+
+            const deviceId = $(apiHelperCloudDeviceSelectElem).val();
+
+            const dev = apiHelper.deviceListCache.find(e => e.id == deviceId);
+
+            // 
+            const platformObj = deviceRestoreInfo.platforms.find(e => e.id == dev.platform_id);
+
+            const versionsList = deviceRestoreInfo.versionsZipByPlatform[platformObj.name];
+
+            const targetVersion = versionsList.find(e => apiHelper.versionSort(e, dev.system_firmware_version) >= 0);
+
+            const baseUrl = '/assets/files/device-restore/' + targetVersion + '/' + platformObj.name;
+
+            const zipUrl = baseUrl + '.zip';
+
+            setStatus('Downloading restore image...');
+        
+            const zipFs = new zip.fs.FS();
+        
+            try {
+                await zipFs.importHttpContent(zipUrl);
             }
-            return resultObj;
-        });
+            catch(e) {
+                setStatus('Error getting restore image, cannot flash device');
+                return;
+            }   
 
-        $(thisPartial).data('loadUrlConfig', function(urlConfig) {
+            let zipEntry = zipFs.find('tinker.bin');
+            if (!zipEntry) {
+                zipEntry = zipFs.find('tracker-edge.bin');
+            }
+
             
+            let partBinary = await zipEntry.getUint8Array();
+            
+            let formData = new FormData();
+
+            let blob = new Blob([partBinary], {type:'application/octet-stream'});
+            formData.append('file', blob, 'firmware.bin');
+            
+            $.ajax({
+                data: formData,
+                contentType: false,
+                error: function(err) {
+                    setStatus('Error flashing device');
+                },
+                method: 'PUT',
+                processData: false,
+                success: function (resp) {
+                    setStatus(resp.status);
+                    setTimeout(function() {
+                        setStatus('');
+                    }, 8000);
+                },
+                url: 'https://api.particle.io/v1/devices/' + deviceId + "?access_token=" + apiHelper.auth.access_token,
+            });    
+
+
         });
 
+    });
 
+    $('.apiHelperTinker').each(function() {
+        const thisPartial = $(this);
+
+        const apiHelperStatusElem = $(thisPartial).find('.apiHelperStatus');
+        const canvasViewDivElem = $(thisPartial).find('.canvasViewDiv');
+        const canvasElem = $(thisPartial).find('.canvasViewDiv > canvas');
+        const pinsDivElem = $(thisPartial).find('.pinsDiv');
+        const deviceImageElem = $(thisPartial).find('.deviceImage');
+
+        let tinker = {
+        };
+
+        const setStatus = function(s) {
+            $(apiHelperStatusElem).text(s);
+        }
+
+        $.ajax({
+            type: 'GET',
+            url: '/assets/files/pinInfo.json',
+            dataType: 'json',
+            success: function(data) {
+                // .details (array)
+                // .platforms (array)
+                tinker.pinInfo = data;
+            },
+            error: function(err) {
+                console.log('error fetching pinInfo', err);
+            },
+        });	
+
+        tinker.functions = [
+            {
+                pinInfoKey: 'analogRead',
+                tinkerFunction: 'analogread',
+                title: 'analogRead',
+            },
+            {
+                pinInfoKey: 'analogWritePWM',
+                pinInfoAltKey: 'analogWriteDAC',
+                tinkerFunction: 'analogwrite',
+                title: 'analogWrite',
+            },
+            {
+                pinInfoKey: 'digitalRead',
+                tinkerFunction: 'digitalread',
+                title: 'digitalRead',
+            },
+            {
+                pinInfoKey: 'digitalWrite',
+                tinkerFunction: 'digitalwrite',
+                title: 'digitalWrite',
+            },
+        ];
+            
+        tinker.callFunction = async function(functionName, arg) {
+            try {
+                const res = await apiHelper.particle.callFunction({ deviceId: tinker.dev.id, name: functionName, argument: arg, auth: apiHelper.auth.access_token  });
+                if (res.statusCode == 200) {
+                    setStatus('Called function ' + functionName + ' ' + arg + ', returned ' + res.body.return_value);
+                    return res.body.return_value;
+                }
+                else {
+                    setStatus('Calling function ' + functionName + ' failed');
+                    return 0;
+                }    
+            }
+            catch(e) {
+                setStatus('Calling function ' + functionName + ' failed');
+                return 0;
+            }
+        }
+
+        tinker.findPinByNum = function(num) {
+            for(const pin of tinker.devicePinInfo.pins) {
+                if (pin.num == num) {
+                    return pin;
+                }
+                if (pin.morePins && pin.morePins.includes(num)) {
+                    return pin;
+                }
+            }
+            return null;
+        }
+
+        tinker.update = async function() {
+            // tinker.dev (object) Device Information
+            // tinker.platformInfo (object): Device Constants platform info
+
+            $(canvasViewDivElem).hide();
+
+            const canvasWidth = $(thisPartial).width();
+            $(canvasElem).css('width', canvasWidth);
+
+            let pinInfoName;
+            switch(tinker.dev.platform_id) {
+                case 10:
+                    pinInfoName = 'Electron';
+                    setStatus('Both E Series and Electron devices display as Electron; this does not affect operation');
+                    break;
+
+                case 32:
+                    // TODO: In the future, determine this by SKU 
+                    pinInfoName = 'Photon 2';
+                    setStatus('Both P2 and Photon 2 devices display as Photon 2; this does not affect operation');
+                    break;
+            }
+
+
+            let skuObj;
+            if (tinker.dev.serial_number) {
+                skuObj = await apiHelper.getSkuObjFromSerial(tinker.dev.serial_number);
+                // console.log('skuObj', skuObj);
+            }
+
+            if (pinInfoName) {
+                tinker.devicePinInfo = tinker.pinInfo.platforms.find(e => e.name == pinInfoName);
+            }
+            else {
+                tinker.devicePinInfo = tinker.pinInfo.platforms.find(e => e.id == tinker.dev.platform_id);
+            }
+            if (!tinker.devicePinInfo) {
+                setStatus('The device platform ' + tinker.dev.platform_id + ' is not currently supported');
+                return;
+            }
+            // console.log('tinker.devicePinInfo', tinker.devicePinInfo);
+            // console.log('tinker.platformInfo', tinker.platformInfo);
+            
+            $(canvasViewDivElem).show();
+
+
+            tinker.pinElements = [];
+
+            const generatePin = function(pin, options = {}) {
+                const pinElement = {
+                    pin,
+                };
+
+                const widths = {
+                    label: 40,
+                    select: 110,
+                    value: 60,
+                }
+                let posOffsets;
+                if (options.reverse) {
+                    posOffsets = [-widths.label, -(widths.label + widths.select), -(widths.label + widths.select + widths.value)];
+                }
+                else {
+                    posOffsets = [0, widths.label, widths.label + widths.select];
+                }
+
+                {
+                    const divElem = document.createElement('div');
+                    $(divElem).css('position', 'absolute');
+                    $(divElem).css('left', options.pos + posOffsets[0]);
+                    $(divElem).css('top', options.top);
+                    $(divElem).css('height', options.height);
+                    $(divElem).css('width', widths.label);
+                    $(divElem).css('line-height', options.height);
+                    if (options.reverse) {
+                        $(divElem).css('text-align', 'right');
+                    }
+                    $(divElem).text(pin.name);
+                    $(options.elem).append(divElem);
+                }
+                if (pin.isIO) {
+                    {
+                        const divElem = document.createElement('div');
+                        $(divElem).css('position', 'absolute');
+                        $(divElem).css('left', options.pos + posOffsets[1]);
+                        $(divElem).css('top', options.top);
+                        $(divElem).css('width', widths.select);
+                        $(divElem).css('height', options.height);
+                            
+                        const selectElem = pinElement.selectElem = document.createElement('select');
+                        $(selectElem).addClass('apiHelperSelect');
+                        $(selectElem).css('width', '100px');
+    
+                        {
+                            const optionElem = document.createElement('option');
+                            $(optionElem).prop('value', '-');
+                            $(optionElem).text('-');
+                            $(selectElem).append(optionElem);
+                        }
+                        for(const fun of tinker.functions) {
+                            if (pin[fun.pinInfoKey] || (fun.pinInfoAltKey && pin[fun.pinInfoAltKey])) {
+                                const optionElem = document.createElement('option');
+                                $(optionElem).prop('value', fun.tinkerFunction);
+                                $(optionElem).text(fun.title);
+                                $(selectElem).append(optionElem);    
+                            }
+                        }
+    
+                        $(divElem).append(selectElem);
+                        $(options.elem).append(divElem);
+                    }
+                    {
+                        const divElem = document.createElement('div');
+                        $(divElem).css('position', 'absolute');
+                        $(divElem).css('left', options.pos + posOffsets[2]);
+                        $(divElem).css('top', options.top);
+                        $(divElem).css('width', widths.value);
+                        $(divElem).css('height', options.height);
+
+                        const inputElem = pinElement.inputElem = document.createElement('input');
+                        $(inputElem).css('display', 'none');
+                        $(inputElem).css('font-size', '11px');
+                        $(inputElem).prop('size', 8);
+                        $(inputElem).prop('value', '0');
+                        $(divElem).append(inputElem);
+    
+                        const spanElem = pinElement.spanElem = document.createElement('span');
+                        $(spanElem).css('display', 'none');
+                        $(spanElem).css('cursor', 'pointer');
+                        $(divElem).css('line-height', options.height);
+                        $(divElem).append(spanElem);
+        
+    
+                        $(options.elem).append(divElem);
+                    }    
+                }
+                
+
+                const updateValue = async function() {
+                    let s;
+
+                    const val = $(pinElement.selectElem).val();
+                    switch(val) {
+                        case 'analogwrite':
+                            s = parseInt($(pinElement.inputElem).val()).toString();
+                            await tinker.callFunction(val, pinElement.pin.name + ':' + s);
+                            break;
+                            
+                        case 'analogread':
+                            s = (await tinker.callFunction(val, pinElement.pin.name)).toString();
+                            $(pinElement.spanElem).text(s);
+                            break;
+
+                        case 'digitalread':
+                            s = (await tinker.callFunction(val, pinElement.pin.name)) ? 'HIGH' : 'LOW';
+                            $(pinElement.spanElem).text(s);
+                            break;
+
+                        case 'digitalwrite':
+                            s = pinElement.output ? 'HIGH' : 'LOW';
+                            $(pinElement.spanElem).text(s);
+                            await tinker.callFunction(val, pinElement.pin.name + ':' + s);
+                            break;
+                    }
+
+                }
+
+                $(pinElement.selectElem).on('change', async function() {
+                    const val = $(pinElement.selectElem).val();
+                    $(pinElement.inputElem).hide();
+                    $(pinElement.spanElem).hide();
+
+                    switch(val) {
+                        case 'analogwrite':
+                            $(pinElement.inputElem).show();
+                            break;
+
+                        case 'analogread':
+                        case 'digitalread':
+                            $(pinElement.spanElem).prop('title', 'Click to re-read value');
+                            $(pinElement.spanElem).show();
+                            break;
+
+                        case 'digitalwrite':
+                            $(pinElement.spanElem).prop('title', 'Click to toggle output');
+                            $(pinElement.spanElem).show();
+                            break;
+                    }
+                    await updateValue();
+                });
+
+
+                $(pinElement).on('keydown', async function(ev) {
+                    if (ev.key != 'Enter') {
+                        return;
+                    }
+        
+                    ev.preventDefault();
+                    await updateValue();                    
+                });
+                $(pinElement.inputElem).on('blur', async function() {
+                    await updateValue();                    
+                });
+                $(pinElement.spanElem).on('click', async function() {
+                    const val = $(pinElement.selectElem).val();
+                    if (val == 'digitalwrite') {
+                        pinElement.output = !pinElement.output;
+                    }
+
+                    await updateValue();                    
+                });
+
+                tinker.pinElements.push(pinElement);
+
+                return pinElement;
+            }
+
+            $(pinsDivElem).empty();
+
+
+            tinker.layout = tinker.devicePinInfo.layout;
+            if (!tinker.layout) {
+                // Create default layout here
+                let pinNumbers = [];
+                for(const pin of tinker.devicePinInfo.pins) {
+                    if (pin.isIO) {
+                        pinNumbers.push(pin.num);
+                        if (pin.morePins) {
+                            for(const p of pin.morePins) {
+                                pinNumbers.push(p);
+                            }
+                        }
+    
+                    }
+                }
+                pinNumbers.sort();
+
+                tinker.layout = {
+                    columns: [
+                        {
+                            pins: [],
+                            reverse: false,
+                            rowStart: 0,
+                            hOffset: -100,
+                        }
+                    ],
+                };
+                for(let ii = 0; ii < pinNumbers.length; ii++) {
+                    tinker.layout.columns[0].pins.push(pinNumbers[ii]);
+                }
+            }
+
+            const contentCenter = Math.floor($(canvasElem).width() / 2);
+            let maxHeight = 0;
+
+            for(let col = 0; col < tinker.layout.columns.length; col++) {
+                const pos = $(canvasElem).position().left + contentCenter + tinker.layout.columns[col].hOffset;
+
+                
+
+                for(let ii = 0; ii < tinker.layout.columns[col].pins.length; ii++) {
+                    const vOffset = (tinker.layout.columns[col].rowStart + ii) * 30;
+                    let top = $(canvasElem).position().top + 20 + vOffset;
+                    if (tinker.layout.extraTop) {
+                        top += tinker.layout.extraTop;
+                    }
+                    const pin = tinker.findPinByNum(tinker.layout.columns[col].pins[ii]);
+                    if (pin) {
+                        pinElement = generatePin(pin, {
+                            top,
+                            pos,
+                            reverse: tinker.layout.columns[col].reverse,
+                            elem: $(pinsDivElem),
+                            height: '27px',
+                        });                    
+                        if ((vOffset + 30) > maxHeight) {
+                            maxHeight = (vOffset + 30);
+                        }
+                    }
+    
+                }
+            }
+
+            if (tinker.layout.extraBottom) {
+                maxHeight += tinker.layout.extraBottom;
+            }
+
+            $(canvasElem).prop('height', maxHeight);
+
+            if (tinker.devicePinInfo.layout && tinker.devicePinInfo.layout.image) {
+                $(deviceImageElem).on('load', function() {
+                    const ctx = canvasElem[0].getContext('2d');
+                    ctx.globalAlpha = 0.5;
+    
+                    ctx.setTransform(tinker.devicePinInfo.layout.scale, 0, 0, tinker.devicePinInfo.layout.scale, tinker.devicePinInfo.layout.translate[0], tinker.devicePinInfo.layout.translate[1]);
+                    ctx.drawImage(deviceImageElem[0], 0, 0);
+                });    
+                $(deviceImageElem).prop('src', tinker.devicePinInfo.layout.image);
+            }
+
+        }
+
+        $(thisPartial).data('tinker', tinker);
+
+        $(thisPartial).on('updateInfo', async function(event, info) {
+            for(const key in info) {
+                tinker[key] = info[key];
+            }
+            await tinker.update();
+        });
     });
 
     $('.apiHelperProductOrSandboxSelector').each(function() {
@@ -2291,14 +1884,28 @@ $(document).ready(function() {
         const productSelectElem = $(thisPartial).find('.apiHelperProductSelect');
         const orgSelectElem = $(thisPartial).find('.apiHelperOrgSelect');
 
+        let productSelector = {};
+        $(thisPartial).data('productSelector', productSelector);
+
         if (!apiHelper.auth) {
             return;
         }
 
-        let orgs;
+        let noSandbox = !!$(thisPartial).data('no-sandbox');
+        if (noSandbox) {
+            $(devOrProductRowElem).hide();
+        }
 
-        const getOptions = function() {
-            const devOrProduct = $(devOrProductRowElem).find('input:checked').val();
+        productSelector.show = function() {
+            $(thisPartial).show();
+        }
+
+        productSelector.hide = function() {
+            $(thisPartial).hide();
+        }
+
+        productSelector.getOptions = function(options) {
+            const devOrProduct = (noSandbox ? 'product' : $(devOrProductRowElem).find('input:checked').val());
             const sandboxOrg = $(sandboxOrgRowElem).find('input:checked').val();
 
             let productId = 0;
@@ -2307,19 +1914,23 @@ $(document).ready(function() {
                 productId = $(productSelectElem).val();
             }
 
-            let options = {                
-                isSandbox: (devOrProduct == 'dev'),
-                hasOrgs: orgs.length > 0,
-                devOrProduct, // 'dev' (sandbox non-product) or 'product'
-                sandboxOrg,   // 'sandbox' product or 'org' product
-                productId,    // 0 if sandbox
-            };
+            options.isSandbox = (devOrProduct == 'dev');
+            options.hasOrgs = productSelector.orgs.length > 0;
+            options.devOrProduct = devOrProduct; // 'dev' (sandbox non-product) or 'product'
+            options.sandboxOrg = sandboxOrg;   // 'sandbox' product or 'org' product
+            options.productId = productId;    // 0 if sandbox
+        
+            if (sandboxOrg != 'sandbox') {
+                options.orgId = $(orgSelectElem).val();
+            }
+            else {
+                options.orgId = 0;
+            }
 
-            return options;
         }
 
         const updateProductList = async function() {
-            if (!orgs) {
+            if (!productSelector.orgs) {
                 // Not fully loaded yet
                 return;
             }
@@ -2353,7 +1964,7 @@ $(document).ready(function() {
 
             const sandboxOrg = $(sandboxOrgRowElem).find('input:checked').val();
 
-            if (orgs.length) {
+            if (productSelector.orgs.length) {
                 // Has organizations
 
                 switch(devOrProduct) {
@@ -2413,7 +2024,9 @@ $(document).ready(function() {
                 urlParams = null;
             }
 
-            $(thisPartial).trigger('updateProductList', [getOptions()]);
+            let options = {};
+            productSelector.getOptions(options);
+            $(thisPartial).trigger('updateProductList', [options]);
         }
 
         $(devOrProductRowElem).find('input').each(function() {
@@ -2432,10 +2045,16 @@ $(document).ready(function() {
 
         $(orgSelectElem).on('change', updateProductList);
 
+        $(productSelectElem).on('change', function() {
+            let options = {};
+            productSelector.getOptions(options);
+            $(thisPartial).trigger('updateProductList', [options]);
+        });
+
         apiHelper.getOrgs().then(async function(orgsData) {
             // No orgs: orgsData.organizations empty array
             // Object in array orgsData.organizations: id, slug, name
-            orgs = orgsData.organizations;
+            productSelector.orgs = orgsData.organizations;
 
             if (orgsData.organizations.length > 0) {
 
@@ -2464,16 +2083,11 @@ $(document).ready(function() {
             await updateProductList();
         });
 
-
-        $(thisPartial).data('getOptions', getOptions);
-        
-        $(thisPartial).data('getUrlConfigObj', function() {
-            let resultObj = {};
-
+        productSelector.getUrlConfigObj = function(resultObj) {
             resultObj.devOrProduct = $(devOrProductRowElem).find('input:checked').val();
             resultObj.sandboxOrg = $(sandboxOrgRowElem).find('input:checked').val();
 
-            if (orgs && orgs.length) {
+            if (productSelector.orgs && productSelector.orgs.length) {
                 resultObj.org = $(orgSelectElem).val();
             }
  
@@ -2483,121 +2097,1169 @@ $(document).ready(function() {
             else {
                 resultObj.productId = 0;
             }
-
-            return resultObj;
-        });
+        };
 
     });
 
-    $('.apiHelperFlashTinker').each(async  function() {
-        const thisPartial = $(this);
+    apiHelper.manualSettings = function() {
+        let manualSettings = {
+            settingsKey: 'manualSetup',
+            settingsChangeEventName: 'manualSetupSettingsChange',
+        };
 
-        const flashTinkerDeviceSelectElem = $(thisPartial).find('.flashTinkerDeviceSelect');
-        const flashTinkerButtonElem = $(thisPartial).find('.flashTinkerButton');
-        const apiHelperStatusElem = $(thisPartial).find('.apiHelperStatus');
+        manualSettings.load = function() {
+            manualSettings.settings = {};
 
-        const setStatus = function(s) {
-            $(apiHelperStatusElem).text(s);
+            const savedSettings = localStorage.getItem(manualSettings.settingsKey);
+            if (savedSettings) {
+                try {
+                    manualSettings.settings = JSON.parse(savedSettings);
+                    if (manualSettings.settings.username != apiHelper.auth.username) {
+                        manualSettings.settings = {};
+                    }
+                    else {
+                        $('.apiHelperManualSetup').trigger(manualSettings.settingsChangeEventName, [manualSettings.settings]);
+                    }
+                }
+                catch(e) {
+                }
+            }
+            return manualSettings.settings;
+        };
+
+        manualSettings.get = function(options = {}) {
+            if (!manualSettings.settings) {
+                manualSettings.load()
+            }
+            if (!options.key) {
+                return manualSettings.settings;
+            }
+            else {
+                if (!manualSettings.settings[options.key]) {
+                    manualSettings.settings[options.key] = {};
+                }
+                return manualSettings.settings[options.key];
+            }
+        };
+
+        manualSettings.setKeyObject = function(key, obj) {
+            manualSettings.get({key});
+
+            manualSettings.settings[key] = Object.assign(manualSettings.settings[key], obj);
+
+            manualSettings.save();
+        };
+
+        manualSettings.save = function() {
+            manualSettings.settings.username = apiHelper.auth.username;
+
+            localStorage.setItem(manualSettings.settingsKey, JSON.stringify(manualSettings.settings));
+
+            $('.apiHelperManualSetup').trigger(manualSettings.settingsChangeEventName, [manualSettings.settings]);
         }
 
-        let devInfo = {};
+        $(document).on(manualSettings.settingsChangeEventName, function(event, settings) {
+            manualSettings.settings = settings;
+        });
+
+        return manualSettings;
+    }();
+
+
+    $('.apiHelperCheckboxList').each(function() {
+        const thisPartial = $(this);
+
+        let checkboxList = {};
+        $(thisPartial).data('checkboxList', checkboxList);
+
+        checkboxList.urlKey = 'cb';
+
+        checkboxList.getOptions = function(options = {}) {
+
+            return options;
+        }
+
+        checkboxList.getUrlConfigObj = function(urlConfig) {
+            const array = checkboxList.getSelectedItems();
+            
+            for(let ii = 0; ii < array.length; ii++) {
+                urlConfig[checkboxList.urlKey + ii] = array[ii];
+            }
+        }
+
+        checkboxList.loadUrlParams = function(urlParams) {
+            checkboxList.urlParams = urlParams;
+        }
+
+        checkboxList.resize = function() {
+            // Remove explicit widths
+            $(thisPartial).find('div').each(function() {
+                const itemElem = $(this);
+                $(itemElem).css('width', '');
+            });
+
+            // Measure
+            let maxWidth = 0;
+            $(thisPartial).find('div').each(function() {
+                const itemElem = $(this);
+                const width = $(itemElem).width();
+                if (width > maxWidth) {
+                    maxWidth = width;
+                }
+            });
+
+            // Assign to widest width
+            $(thisPartial).find('div').each(function() {
+                const itemElem = $(this);
+                $(itemElem).css('width', (maxWidth + 10) + 'px');
+            });
+        };
+
+        checkboxList.addItem = function(itemName, options = {}) {
+            const divElem = document.createElement('div');
+            const labelElem = document.createElement('label');
+
+            const checkboxElem = document.createElement('input');
+            $(checkboxElem).attr('type', 'checkbox');
+            $(checkboxElem).data('itemName', itemName);
+
+            if (options.checked) {
+                $(checkboxElem).prop('checked', true);
+            }
+
+            $(checkboxElem).on('click', function() {
+                $(thisPartial).trigger('updateSearchParam'); 
+            });
+
+            $(labelElem).append(checkboxElem);
+            $(labelElem).append(document.createTextNode(itemName));
+            
+            $(divElem).append(labelElem);
+            $(divElem).append(document.createElement('br'));
+
+            $(thisPartial).append(divElem);            
+            checkboxList.resize();
+        };
+
+        checkboxList.addArray = function(array, options = {}) {
+            for(const itemName of array) {
+                checkboxList.addItem(itemName, options);
+            }
+
+            if (checkboxList.urlParams) {
+
+                for(let ii = 0; ; ii++) {
+                    const value = checkboxList.urlParams.get(checkboxList.urlKey + ii);
+                    if (!value) {
+                        break;
+                    }
+                    checkboxList.selectItem(value);
+                }
+    
+                checkboxList.urlParams = null;
+            }
+
+
+            checkboxList.resize();
+        };
+
+        checkboxList.selectItem = function(itemName) {
+            $(thisPartial).find('input').each(function() {
+                const itemElem = $(this);
+                if ($(itemElem).data('itemName') == itemName) {
+                    $(itemElem).prop('checked', true);
+                }
+            });
+        };
+
+        checkboxList.getSelectedItems = function(itemName) {
+            let array = [];
+
+            $(thisPartial).find('input').each(function() {
+                const itemElem = $(this);
+                if ($(itemElem).prop('checked')) {
+                    const itemName = $(itemElem).data('itemName');
+                    array.push(itemName);
+                }
+            });
+
+            return array;
+        };
+
+
+        checkboxList.empty = function() {
+            $(thisPartial).empty();
+        };
+
+
+    });
+
+    // Select or create a device group
+    $('.apiHelperDeviceGroup').each(function() {
+        const thisPartial = $(this);
+
+        let productId;
+        let groups;
+
+        const productIsSelectedElem = $(thisPartial).find('.productIsSelected');
+        // const selectedProductCellElem = $(thisPartial).find('.selectedProductCell');
+
+        const groupListDivElem = $(thisPartial).find('.groupListDiv');
+        const newGroupTextElem = $(thisPartial).find('.newGroupText');
+        const newGroupButtonElem = $(thisPartial).find('.newGroupButton');
+        const newGroupFirmwareSelectElem = $(thisPartial).find('.newGroupFirmwareSelect');
+        const statusMessageElem = $(thisPartial).find('.statusMessage');
+        const newGroupSetFirmwareCheckboxElem = $(thisPartial).find('.newGroupSetFirmwareCheckbox');
+        const showNewGroupButton = $(thisPartial).find('.showNewGroupButton');
+        const createNewGroupDivElem = $(thisPartial).find('.createNewGroupDiv');
+        const newGroupDescriptionTextElem = $(thisPartial).find('.newGroupDescriptionText');
+    
+        let deviceGroup = {};
+        $(thisPartial).data('deviceGroup', deviceGroup)
+
+        deviceGroup.checkboxList = $(groupListDivElem).data('checkboxList');
+
+        deviceGroup.checkboxList.urlKey = 'g';
+
+        deviceGroup.getOptions = function(options = {}) {
+            options.groups = deviceGroup.checkboxList.getSelectedItems();
+            return options;
+        }
+        
+        deviceGroup.getUrlConfigObj = function(urlConfig) {
+            deviceGroup.checkboxList.getUrlConfigObj(urlConfig);
+
+        }
+
+        deviceGroup.loadUrlParams = function(urlParams) {
+            // This saves the urlParams in the checkbox list. addArray checks the saved urlParams
+            deviceGroup.checkboxList.loadUrlParams(urlParams);
+        }
+
+
+        // 
+        const updateSettings = async function(settings = apiHelper.manualSettings.get()) {
+            if (apiHelper.auth && settings && settings.createOrSelectProduct && settings.createOrSelectProduct.productId) {
+                productId = settings.createOrSelectProduct.productId;
+                $(productIsSelectedElem).show();
+
                 
-        apiHelper.deviceList(flashTinkerDeviceSelectElem, {
-            deviceFilter: function(dev) {
-                if (dev.online) {
-                    devInfo[dev.id] = dev;
+                const firmwareRes = await apiHelper.particle.listProductFirmware({ 
+                    product: productId,
+                    auth: apiHelper.auth.access_token 
+                });
+                // console.log('firmwareRes', firmwareRes);
+                // body: array of objects:
+                //  version, title, description, device_count, name (filename), groups, product_default, immediate, mandatory, uploaded_by, uploaded_on, _id,
+                $(newGroupFirmwareSelectElem).empty();
+                for(const firmwareObj of firmwareRes.body) {
+                    const optionElem = document.createElement('option');
+                    $(optionElem).attr('value', firmwareObj.version.toString());
+                    $(optionElem).text(firmwareObj.title + (firmwareObj.product_default ? ' (product default)' : ''));
+                    if (firmwareObj.product_default) {
+                        $(optionElem).attr('selected', 'selected');
+                    }
+                    $(newGroupFirmwareSelectElem).append(optionElem);
                 }
-                return dev.online;
-            },
-            getTitle: function(dev) {
-                let result;
 
-                if (dev.name) {
-                    result = dev.name;
+                // Fetch device groups
+                const productRes = await apiHelper.particle.getProduct({ 
+                    product: productId,
+                    auth: apiHelper.auth.access_token 
+                });
+                // console.log('productRes', productRes);
+                // body.product.
+                //  id, name, description, device_count, groups[], etc.
+
+                groups = productRes.body.product.groups;
+
+                deviceGroup.checkboxList.empty(); 
+                // addArray checks urlParams to see if the items should be checked
+                deviceGroup.checkboxList.addArray(groups);
+
+            }
+            else {
+                $(productIsSelectedElem).hide();
+            }
+        }
+        updateSettings();
+
+    
+
+        $(newGroupTextElem).on('input', function() {
+            const groupName = $(newGroupTextElem).val().trim();
+            if (productId && groupName.length) {
+                // The name of the group. Must only contain lowercase letters, numbers, dashes, and underscores.
+                // TODO: There's a maximum length, enforce that here as well, once I figure out what it is
+                const validRE = /^[-a-z0-9_]+$/;
+                if (groupName.match(validRE)) {
+                    if (!groups.includes(groupName)) {
+                        $(newGroupButtonElem).prop('disabled', false);
+                        setStatus('');    
+                    }
+                    else {
+                        setStatus('Group name already exists');    
+                    }
                 }
                 else {
-                    result = dev.id;
+                    $(newGroupButtonElem).prop('disabled', true);
+                    setStatus('Group name can only contain lowercase letters, numbers, dashes, and underscores');
                 }
-                result += (dev.online ? '' : ' (offline)');
-                return result;
-            },                    
-            hasRefresh: true,
-            hasSelectDevice: true,
-            onChange: function(elem) {
-                const newVal = $(elem).val();
-                if (newVal != 'select') {
-                    $(flashTinkerButtonElem).removeAttr('disabled');
+            }
+            else {
+                $(newGroupButtonElem).prop('disabled', true);
+            }
+        });
+
+        $(showNewGroupButton).on('click', function() {
+            $(showNewGroupButton).hide();
+            $(createNewGroupDivElem).show();
+        });
+
+        $(newGroupButtonElem).on('click', async function() {
+            $(newGroupButtonElem).prop('disabled', true);
+
+            const groupName = $(newGroupTextElem).val().trim();
+            const description = $(newGroupDescriptionTextElem).val();
+
+            // Create a group
+            let requestData = {
+                name: groupName,
+                description,
+            };
+
+            await new Promise(function(resolve, reject) {
+                let request = {
+                    contentType: 'application/json',
+                    data: JSON.stringify(requestData),
+                    dataType: 'json',
+                    error: function (jqXHR) {
+                        console.log('error', jqXHR);
+                        reject(jqXHR);
+                    },
+                    headers: {
+                        'Authorization': 'Bearer ' + apiHelper.auth.access_token,
+                        'Accept': 'application/json'
+                    },
+                    method: 'POST',
+                    success: function (resp, textStatus, jqXHR) {
+                        console.log('resp', resp);
+                        resolve();
+                    },
+                    url: 'https://api.particle.io/v1/products/' + productId + '/groups',
                 }
-                else {
-                    $(flashTinkerButtonElem).attr('disabled', 'disabled');      
-                }            
+                $.ajax(request);
+            });
+
+            // Release firmware to group
+
+            // Add to popup
+            deviceGroup.checkboxList.addItem(groupName, {checked:true});
+            groups.push(groupName);
+    
+            $(newGroupButtonElem).prop('disabled', false);
+            $(newGroupTextElem).val('');
+
+            $(showNewGroupButton).show();
+            $(createNewGroupDivElem).hide();
+
+        });
+
+        $(newGroupSetFirmwareCheckboxElem).on('click', function() {
+            const setVersion = $(newGroupSetFirmwareCheckboxElem).prop('checked');
+            if (setVersion) {
+                $(newGroupFirmwareSelectElem).show();
             }
-        });   
-
-        $(flashTinkerButtonElem).on('click', async function() {
-            let deviceRestoreInfo = await apiHelper.getDeviceRestoreInfo();
-
-            const deviceId = $(flashTinkerDeviceSelectElem).val();
-
-            const deviceInfoObj = devInfo[deviceId];
-
-            // 
-            const platformObj = deviceRestoreInfo.platforms.find(e => e.id == deviceInfoObj.platform_id);
-
-            const versionsList = deviceRestoreInfo.versionsZipByPlatform[platformObj.name];
-
-            const targetVersion = versionsList.find(e => apiHelper.versionSort(e, deviceInfoObj.system_firmware_version) >= 0);
-
-            const baseUrl = '/assets/files/device-restore/' + targetVersion + '/' + platformObj.name;
-
-            const zipUrl = baseUrl + '.zip';
-
-            setStatus('Downloading restore image...');
-        
-            const zipFs = new zip.fs.FS();
-        
-            try {
-                await zipFs.importHttpContent(zipUrl);
+            else {
+                $(newGroupFirmwareSelectElem).hide();
             }
-            catch(e) {
-                setStatus('Error getting restore image, cannot flash device');
-                return;
-            }   
+        });
 
-            let zipEntry = zipFs.find('tinker.bin');
-            if (!zipEntry) {
-                zipEntry = zipFs.find('tracker-edge.bin');
-            }
+        $(thisPartial).on('updateSearchParam', function(event) {
+            console.log('apiHelperDeviceGroup updateSearchParam');
+        });
 
-            
-            let partBinary = await zipEntry.getUint8Array();
-            
-            let formData = new FormData();
-
-            let blob = new Blob([partBinary], {type:'application/octet-stream'});
-            formData.append('file', blob, 'firmware.bin');
-            
-            $.ajax({
-                data: formData,
-                contentType: false,
-                error: function(err) {
-                    setStatus('Error flashing device');
-                },
-                method: 'PUT',
-                processData: false,
-                success: function (resp) {
-                    setStatus(resp.status);
-                    setTimeout(function() {
-                        setStatus('');
-                    }, 8000);
-                },
-                url: 'https://api.particle.io/v1/devices/' + deviceId + "?access_token=" + apiHelper.auth.access_token,
-            });    
-
-
+        $(document).on(apiHelper.manualSettings.settingsChangeEventName, function(event, settings) {
+            updateSettings(settings);
         });
 
     });
 
+
+    $('.apiHelperAddDeviceToProduct').each(function() {
+        const thisPartial = $(this);
+
+        const productIsSelectedElem = $(thisPartial).find('.productIsSelected');
+        const selectedProductCellElem = $(thisPartial).find('.selectedProductCell');
+        const statusMessageElem = $(thisPartial).find('.statusMessage');
+        const deviceIdTextElem = $(thisPartial).find('.deviceIdText');
+        const addDeviceButtonElem = $(thisPartial).find('.addDeviceButton');
+        const deviceInstructionsElem = $(thisPartial).find('.deviceInstructions');
+        const claimDeviceCheckboxElem = $(thisPartial).find('.claimDeviceCheckbox');
+        const markDevelopmentCheckboxElem = $(thisPartial).find('.markDevelopmentCheckbox');
+        const nameDeviceCheckboxElem = $(thisPartial).find('.nameDeviceCheckbox');
+        const deviceNameTextElem = $(thisPartial).find('.deviceNameText');
+        const addResultElem = $(thisPartial).find('.addResult');
+        const claimResultElem = $(thisPartial).find('.claimResult');
+        const markDevelopmentResultElem = $(thisPartial).find('.markDevelopmentResult');
+        const nameResultElem = $(thisPartial).find('.nameResult');
+        const allResultsElem = $(thisPartial).find('.allResults');
+
+
+        
+        
+        let productId;
+
+        // const Elem = $(thisPartial).find('.');
+
+        const setStatus = function(s) {
+            $(statusMessageElem).text(s);
+        }
+
+        const updateButton = async function() {
+            const text = $(deviceIdTextElem).val().trim();
+
+            if (apiHelper.isDeviceId(text)) {
+                // Is a Device ID                
+                setStatus('Appears to be a Device ID, can attempt to add');
+                $(addDeviceButtonElem).prop('disabled', false);
+                $(deviceInstructionsElem).hide();
+            }
+            else if (apiHelper.isSerialNumber(text)) {
+                // Looks like a serial number
+                setStatus('Appears to be a serial number, can attempt to add');
+                $(addDeviceButtonElem).prop('disabled', false);
+                $(deviceInstructionsElem).hide();
+            }
+            else {
+                setStatus('');
+                $(addDeviceButtonElem).prop('disabled', true);
+                $(deviceInstructionsElem).show();
+            }
+        }
+
+        const updateSettings = function(settings = apiHelper.manualSettings.get()) {
+
+            if (settings && settings.createOrSelectProduct && settings.createOrSelectProduct.productId) {
+                productId = settings.createOrSelectProduct.productId;
+                $(productIsSelectedElem).show();
+                $(selectedProductCellElem).text(settings.createOrSelectProduct.productName + ' (' + settings.createOrSelectProduct.productId + ')');
+                setStatus('');
+            } 
+            else {
+                $(productIsSelectedElem).hide();
+                setStatus('Select the product to add the device to (above)');
+            }
+            if (settings && settings.deviceSelect && settings.deviceSelect.deviceId) {
+                $(deviceIdTextElem).val(settings.deviceSelect.deviceId);
+                updateButton();
+            }
+        }
+        updateSettings();
+
+        // Defined in api-helper.extras.js
+        $(deviceNameTextElem).val(apiHelper.getRandomTrochee());
+
+
+        $(deviceIdTextElem).on('keydown', function(ev) {
+            if (ev.key == 'Enter') {
+                $(addDeviceButtonElem).trigger('click');
+                ev.preventDefault();
+            }
+        });
+
+        $(addDeviceButtonElem).on('click', async function() {
+            let text = $(deviceIdTextElem).val().trim();
+            if (text.length == 0 || !productId) {
+                return;
+            }
+            let isDeviceId = false;
+            
+            if (apiHelper.isDeviceId(text)) {
+                text = text.toLowerCase();
+                isDeviceId = true;
+            }
+            else {
+                const spaceOffset = text.indexOf(' ');
+                if (spaceOffset > 0) {
+                    text = text.substring(0, spaceOffset);
+                }    
+            }
+            $(deviceIdTextElem).val(text);
+
+            $(allResultsElem).text('');
+
+            $(addDeviceButtonElem).prop('disabled', true);
+
+            setStatus('Adding device to product ' + productId + '...');
+
+            const res = await apiHelper.particle.addDeviceToProduct({ 
+                deviceId: text,
+                product: productId,
+                auth: apiHelper.auth.access_token 
+            });
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+                console.log('res', res);
+
+                let deviceId;
+
+                if (isDeviceId) {
+                    deviceId = text;
+
+                    setStatus('Adding device to product ' + productId + ' succeeded');
+                    $(addResultElem).text('\u2705'); // green check
+                }
+                else {
+                    setStatus('Checking product for newly added device...');
+                    const deviceResult = await apiHelper.getAllDevices({productId});
+
+                    console.log('deviceResult', deviceResult);
+
+                    // Array of device objects:
+                    //   id, name, iccid, serial_number, etc.
+                    for(const d of deviceResult) {
+                        if (d.serial_number == text) {
+                            deviceId = d.id;
+                        }
+                    }
+
+                    // TODO: If this is an Electron (platform = 10) and iccid is not set, need to
+                    // activate the SIM separately
+
+                    setStatus('Adding device to product ' + productId + ' succeeded');
+                    $(addResultElem).text('\u2705'); // green check
+                }
+
+                if ($(claimDeviceCheckboxElem).prop('checked')) {
+                    const claimRes = await apiHelper.particle.claimDevice({
+                        deviceId,
+                        auth: apiHelper.auth.access_token     
+                    });
+                    console.log('claimRes', claimRes);
+
+                    $(claimResultElem).text((claimRes.statusCode == 200) ? '\u2705': '\u274C'); 
+                }
+                if ($(markDevelopmentCheckboxElem).prop('checked')) {
+                    const markDevelopmentRes = await apiHelper.particle.markAsDevelopmentDevice({
+                        deviceId,
+                        product: productId,
+                        development: true,
+                        auth: apiHelper.auth.access_token     
+                    });
+
+                    console.log('markDevelopmentRes', markDevelopmentRes);
+                    $(markDevelopmentResultElem).text((markDevelopmentRes.statusCode == 200) ? '\u2705': '\u274C'); 
+                }
+                if ($(nameDeviceCheckboxElem).prop('checked')) {
+                    const name = $(deviceNameTextElem).val().trim();
+
+                    const nameRes = await apiHelper.particle.renameDevice({
+                        deviceId,
+                        product: productId,
+                        name,
+                        auth: apiHelper.auth.access_token     
+                    });
+
+                    console.log('nameRes', nameRes);
+                    $(nameResultElem).text((nameRes.statusCode == 200) ? '\u2705': '\u274C'); 
+                }
+
+                const infoRes = await apiHelper.particle.getDevice({
+                    deviceId: text,
+                    product: productId,
+                    auth: apiHelper.auth.access_token     
+                });
+                console.log('infoRes', infoRes);
+
+                // infoRes.body contains the device object
+                //   id, name, iccid, serial_number, etc.
+
+            }
+            else {
+                setStatus('Adding device to product ' + productId + ' failed');
+                $(addResultElem).text('\u274C'); // Red X
+            }
+
+            $(addDeviceButtonElem).prop('disabled', false);
+
+            
+        });
+        $(deviceIdTextElem).on('input', async function() {
+            await updateButton();
+        });
+
+        $(deviceNameTextElem).on('input', function() {
+            const text = $(deviceNameTextElem).val().trim();
+            if (text.length > 0) {
+                $(nameDeviceCheckboxElem).prop('checked', true);
+            }
+            else {
+                $(nameDeviceCheckboxElem).prop('checked', false);
+            }
+        });
+
+
+        $(document).on(apiHelper.manualSettings.settingsChangeEventName, function(event, settings) {
+            console.log('settings update', settings);
+            updateSettings(settings);
+        });
+
+
+
+    });
+
+
+    $('.apiHelperCreateOrSelectProduct').each(function() {
+        const thisPartial = $(this);
+
+        let partialOptions = $(thisPartial).data('options').split(',');
+        if (!partialOptions) {
+            partialOptions = [];
+        }
+        // sandboxOnly - don't show org options even if the account is in an org
+        // status - show status row
+
+        if (partialOptions.includes('status')) {
+            $(thisPartial).show('.statusRow');
+        }
+
+        const platformSelectElem = $(thisPartial).find('.apiHelperPlatformSelect');
+        const deviceTypeSKUsElem = $(thisPartial).find('.deviceTypeSKUs');
+
+        const sandboxOrgRowElem = $(thisPartial).find('.sandboxOrgRow');
+        const sandboxOrgRadioCheckedVal = function() {
+            return $(sandboxOrgRowElem).find('input:checked').val();
+        };
+        const sandboxOrgRadioSelect = function(value) {
+            $(sandboxOrgRowElem).find('input[type="radio"]').prop('checked', false);
+            $(sandboxOrgRowElem).find('input[value="' + value + '"]').prop('checked', true);            
+        };
+        const orgSelectorRowElem = $(thisPartial).find('.orgSelectorRow');
+        const productSelectorRowElem = $(thisPartial).find('.productSelectorRow');
+        const productSelectElem = $(thisPartial).find('.apiHelperProductSelect');
+        const orgSelectElem = $(thisPartial).find('.apiHelperOrgSelect');
+
+        const productNameInputElem = $(thisPartial).find('.productNameInput');
+
+        const newExistingRadioElem = $(thisPartial).find('input[name="newExisting"]');
+        const newRadioElem = $(thisPartial).find('input[name="newExisting"][value="new"]');
+        const existingRadioElem = $(thisPartial).find('input[name="newExisting"][value="existing"]');
+        const newExistingRadioCheckedVal = function() {
+            return $(thisPartial).find('input[name="newExisting"]:checked').val();
+        }
+        const refreshProductsElem = $(thisPartial).find('.refreshProducts');
+
+        const createProductButtonElem = $(thisPartial).find('.createProductButton');
+        const statusMessageElem = $(thisPartial).find('.statusMessage');
+
+        let carriersJson;
+
+        const setStatus = function(s) {
+            $(statusMessageElem).text(s);
+        }
+        setStatus('Loading...');
+
+        let productSelector = {};
+        $(thisPartial).data('productSelector', productSelector);
+
+        if (!apiHelper.auth) {
+            return;
+        }
+
+        $(document).on('deviceSelected', function(event, deviceObj) {
+            $(platformSelectElem).val(deviceObj.platform_id.toString());
+            $(platformSelectElem).trigger('change');
+        })
+
+        productSelector.getOptions = function(options) {
+            if (!options) {
+                options = {};
+            }
+            const platformIdStr = $(platformSelectElem).val();
+            if (platformIdStr == '-') {
+                // No settings selected yet
+                return options;
+            }
+
+            options.platformId = parseInt(platformIdStr);
+
+            if (productSelector.orgs.length && !partialOptions.includes('sandboxOnly')) {
+                // Has organizations
+
+                // sandbox or org
+                options.sandboxOrg = sandboxOrgRadioCheckedVal();
+                if (options.sandboxOrg == 'org') {
+                    options.orgId = $(orgSelectElem).val();
+                }
+                else {
+                    options.orgId = 0;
+                }
+            }
+            else {
+                options.sandboxOrg = 'sandbox';
+                options.orgId = 0;
+            }
+
+            // new or existing
+            options.newExisting = newExistingRadioCheckedVal();
+
+            if (options.newExisting == 'new') {
+                options.productName = $(productNameInputElem).val();
+            }
+            else {
+                options.productId = parseInt($(productSelectElem).val());
+                const productObj = productSelector.productsData.products.find(e => e.id == options.productId);
+                if (productObj) {
+                    options.productName = productObj.name;
+                }
+            }
+
+            return options;
+        }
+
+        const urlConfigFields = ['platformId', 'orgId', 'sandboxOrg', 'productId'];
+
+        productSelector.getUrlConfigObj = function(resultObj) {
+
+            const options = productSelector.getOptions();
+
+            for(const field of urlConfigFields) {
+                if (options[field]) {
+                    resultObj[field] = options[field];
+                }
+            }
+
+        };
+
+
+        productSelector.loadUrlParams = function(urlParams) {
+            productSelector.urlParams = urlParams;
+
+            let settings = apiHelper.manualSettings.get({key:'createOrSelectProduct'});
+
+            for(const field of urlConfigFields) {
+                const value = urlParams.get(field);
+                if (value) {
+                    settings[field] = value;
+                }
+            }
+
+            apiHelper.manualSettings.save();
+        };
+
+        productSelector.saveSettings = function() {
+            let settings = apiHelper.manualSettings.get({key:'createOrSelectProduct'});
+            productSelector.getOptions(settings);
+            apiHelper.manualSettings.save();
+
+            let productId = 0;
+            if (settings.newExisting != 'new') {
+                const productSelectValString = $(productSelectElem).val();
+                if (productSelectValString) {
+                    productId = parseInt(productSelectValString);
+                }
+            }
+
+            console.log('triggering commonProductSelected', productId);
+            $(thisPartial).trigger('commonProductSelected', [productId]);
+        }
+
+        const updateNewExistingButton = function() {
+            const newExisting = newExistingRadioCheckedVal();
+
+            if (newExisting == 'new') {
+                if ($(productNameInputElem).val().trim().length) {
+                    $(createProductButtonElem).prop('disabled', false);
+                }
+                else {
+                    $(createProductButtonElem).prop('disabled', true);
+                }                                
+            }
+            else {
+                $(createProductButtonElem).prop('disabled', true);
+            }    
+            $(thisPartial).trigger('updateProductList');
+        }
+
+        const updateProductList = async function(options = {}) {
+            if (!productSelector.orgs) {
+                // Not fully loaded yet
+                return;
+            }
+
+            const platformIdStr = $(platformSelectElem).val();
+            if (platformIdStr == '-') {
+                // No platform selected
+                return;
+            }
+            const platformId = parseInt(platformIdStr);
+
+            $(orgSelectorRowElem).hide();
+            $(sandboxOrgRowElem).hide();    
+            
+            const sandboxOrg = sandboxOrgRadioCheckedVal();
+
+            if (productSelector.orgs.length && !partialOptions.includes('sandboxOnly')) {
+                // Has organizations
+
+                $(sandboxOrgRowElem).show();
+                switch(sandboxOrg) {
+                    case 'sandbox':
+                        break;
+
+                    case 'org':
+                        $(orgSelectorRowElem).show();
+                        break;
+                }               
+            }
+
+            setStatus('Getting products...');
+
+            if (sandboxOrg == 'sandbox') {
+                productSelector.productsData = await apiHelper.getProducts();
+            }
+            else {
+                const orgId = $(orgSelectElem).val();
+                if (!orgId) {
+                    return;
+                }
+                productSelector.productsData = await apiHelper.getOrgProducts(orgId);
+            }
+            
+            productSelector.productsData.products.sort(function (a, b) {
+                return a.name.localeCompare(b.name);
+            });
+
+            const lastSelected = $(productSelectElem).val();
+            $(productSelectElem).empty();
+
+            for(const product of productSelector.productsData.products) {
+                if (product.platform_id == platformId) {
+                    const optionElem = document.createElement('option');
+                    $(optionElem).attr('value', product.id.toString());
+                    $(optionElem).text(product.name + ' (' + product.id + ')');
+                    $(productSelectElem).append(optionElem);    
+
+                    let settings = apiHelper.manualSettings.get({key:'createOrSelectProduct'});
+                    if (settings.productId == product.id) {
+                        $(productSelectElem).val(product.id.toString());
+                        $(newExistingRadioElem).prop('checked', false);
+                        $(existingRadioElem).prop('checked', true);
+                        $(createProductButtonElem).prop('disabled', true);
+                    }
+
+                }
+            }
+            if (lastSelected) {
+                $(productSelectElem).val(lastSelected);
+            }
+
+            $(productSelectorRowElem).show();
+
+            updateNewExistingButton();
+
+            setStatus('');
+
+            $(thisPartial).trigger('updateProductList');
+        }
+
+        $(sandboxOrgRowElem).find('input').each(function() {
+            const radioElem = $(this);
+            $(radioElem).on('click', async function() {
+                await updateProductList();
+            });
+        });
+
+        $(orgSelectElem).on('change', updateProductList);
+
+        apiHelper.getOrgs().then(async function(orgsData) {
+            // No orgs: orgsData.organizations empty array
+            // Object in array orgsData.organizations: id, slug, name
+            productSelector.orgs = orgsData.organizations;
+
+            if (orgsData.organizations.length > 0) {
+
+                for (let org of orgsData.organizations) {
+                    const optionElem = document.createElement('option');
+                    $(optionElem).attr('value', org.id);
+                    $(optionElem).text(org.name);
+
+                    $(orgSelectElem).append(optionElem);        
+                }
+                let settings = apiHelper.manualSettings.get({key:'createOrSelectProduct'});
+                if (settings.orgId) {
+                    sandboxOrgRadioSelect('org');
+                    $(orgSelectElem).val(settings.orgId);                    
+                }
+            }
+            else {
+                // No orgs
+                // $(sandboxOrgRowElem).find('input[value=org]:radio').prop('disabled', true);
+                $(orgSelectorRowElem).hide();
+                $(sandboxOrgRowElem).hide();
+            }
+
+            await updateProductList();
+        });
+
+        apiHelper.getCarriersJson().then(function(carriersJsonIn) {
+            carriersJson = carriersJsonIn;
+
+            let platforms = [];
+            
+            for(const platformName in carriersJson.deviceConstants) {
+                const platformObj = carriersJson.deviceConstants[platformName];
+                if (platformObj.productEligible) {
+                    platforms.push(platformName);
+                }
+            }
+            platforms.sort(function(a, b) {
+                return carriersJson.deviceConstants[a].displayName.localeCompare(carriersJson.deviceConstants[b].displayName);
+            })
+
+            for(const platformName of platforms) {
+                const platformObj = carriersJson.deviceConstants[platformName];
+                const optionElem = document.createElement('option');
+                $(optionElem).text(platformObj.displayName + ' (' + platformObj.id + ')');
+                $(optionElem).attr('value', platformObj.id.toString());
+                $(platformSelectElem).append(optionElem);    
+            }
+
+            let settings = apiHelper.manualSettings.get({key:'createOrSelectProduct'});
+            if (settings.platformId) {
+                $(platformSelectElem).val(settings.platformId.toString());
+                $(platformSelectElem).trigger('change');
+            }
+
+            setStatus('');
+
+        });
+
+        $(createProductButtonElem).on('click', function() {
+            // 
+            const options = productSelector.getOptions();
+
+            let requestDataObj = {
+                product: {
+                    name: options.productName,
+                    platform_id: options.platformId,
+                },
+            };
+
+            setStatus('Creating product...');
+
+            let url;
+            if (options.sandboxOrg == 'org') {
+                url = 'https://api.particle.io/v1/orgs/' + options.orgId + '/products/';
+            }
+            else {
+                url = 'https://api.particle.io/v1/user/products/';
+            }
+
+            const request = {                
+                contentType: 'application/json',
+                data: JSON.stringify(requestDataObj),
+                dataType: 'json',
+                error: function (jqXHR) {
+                    // analytics.track('Error', {category:simpleGetConfig.gaAction, label:(jqXHR.responseJSON ? jqXHR.responseJSON.error : '')});
+                    console.log('error', jqXHR);
+                    setStatus('Product creation failed');
+                },
+                headers: {
+                    'Authorization': 'Bearer ' + apiHelper.auth.access_token,
+                    'Accept': 'application/json'
+                },
+                method: 'POST',
+                success: function (resp, textStatus, jqXHR) {
+                    // analytics.track('Success', {category:simpleGetConfig.gaAction});
+                    console.log('success', resp);
+                    // ok: boolean
+                    // product: object
+                    //      id: int product ID
+                    //      platform_id
+                    //      name
+                    //      slug
+                    //      description
+                    //      settings: object
+                    //      groups: array
+                    //      device_count: integer
+                    if (resp.ok) {
+                        // Add to popup and select
+                        const optionElem = document.createElement('option');
+                        $(optionElem).attr('value', resp.product.id.toString());
+                        $(optionElem).text(resp.product.name + ' (' + resp.product.id + ') (newly created)');
+                        $(productSelectElem).append(optionElem);    
+
+                        $(productSelectElem).val(resp.product.id.toString());
+                        $(newExistingRadioElem).prop('checked', false);
+                        $(existingRadioElem).prop('checked', true);
+                        $(productNameInputElem).val('');
+                        $(createProductButtonElem).prop('disabled', true);
+
+                        productSelector.saveSettings();
+                        setStatus('Product ' + resp.product.name + ' successfully created');
+                    }
+                    else {
+                        setStatus('Product creation failed');
+                        console.log('request failed', resp);
+                    }
+                },
+                url,
+            };
+
+            $.ajax(request);
+
+        });
+
+        $(productNameInputElem).on('input', function() {
+            $(newExistingRadioElem).prop('checked', false);
+            $(newRadioElem).prop('checked', true);
+
+            updateNewExistingButton();
+        });
+
+        $(productSelectElem).on('change', function() {
+            $(newExistingRadioElem).prop('checked', false);
+            $(existingRadioElem).prop('checked', true);
+            productSelector.saveSettings();
+            $(thisPartial).trigger('updateProductList');
+        });
+
+        $(newRadioElem).on('click', function() {
+            updateNewExistingButton();
+        });
+
+        $(existingRadioElem).on('click', function() {
+            updateNewExistingButton();
+            productSelector.saveSettings();
+        });
+
+
+        $(refreshProductsElem).on('click', async function() {
+            await updateProductList({clearCache:true});
+        });
+
+        $(document).on(apiHelper.manualSettings.settingsChangeEventName, function(event, settings) {
+            if (settings && settings.deviceSelect && settings.deviceSelect.platformId) {
+                $(platformSelectElem).val(settings.deviceSelect.platformId.toString());
+                $(platformSelectElem).trigger('change');    
+            }
+    
+        });
+
+
+
+        $(platformSelectElem).on('change', async function() {
+
+            const value = $(this).val();
+
+            const firstOptionElem = $(this).find('option').first();
+            if ($(firstOptionElem).val() == '-') {
+                $(firstOptionElem).remove();
+            }
+
+            
+            $(deviceTypeSKUsElem).empty();
+
+
+            const platformId = parseInt(value);
+
+            let skus = [];
+
+            for(const skuObj of carriersJson.skus) {
+                if (skuObj.lifecycle == 'Hidden') {
+                    // Hidden SKU
+                    continue;
+                }
+                if (skuObj.multiple) {
+                    // Omit tray SKUs
+                    continue;
+                }
+                if (skuObj.platformId == platformId) {
+                    skus.push(skuObj.name);                        
+                }
+            }
+
+            skus.sort();
+
+            $(deviceTypeSKUsElem).text(skus.join(', '));
+        
+            for(const platformName in carriersJson.deviceConstants) {
+                const platformObj = carriersJson.deviceConstants[platformName];
+                if (platformObj.id == platformId) {
+                    $(productNameInputElem).val('test-' + platformObj.name + '-' + Math.floor(Math.random() * 99999));
+                }
+            }
+
+            await updateProductList();
+
+        });
+
+        
+
+    });
+
+
+
+    apiHelper.flattenObject = function(objIn) {
+        let objOut = {};
+
+        console.log('flattenObject objIn', objIn);
+
+        
+        const flattenInternal = function(valueIn, prefix) {
+            if (Array.isArray(valueIn)) {
+                for(let ii = 0; ii < valueIn.length; ii++) {
+                    const newKey = prefix + '[' + ii + ']';
+                    flattenInternal(valueIn[ii], newKey);
+                }
+            }
+            else
+            if (typeof valueIn == 'object') {
+                for(const key in valueIn) {
+                    const newKey = prefix + (prefix != '' ? '.' : '') + key;
+                    flattenInternal(valueIn[key], newKey);
+                }
+            }
+            else {
+                objOut[prefix] = valueIn;
+            }
+        }
+        flattenInternal(objIn, '');
+
+
+        console.log('flattenObject objOut', objOut);
+
+        return objOut;
+    }
+
+
 });
+
+
+/*
+function updateTinker(settings) {
+    $('.apiHelperTinker').each(function() {
+        const thisPartial = $(this);
+
+        let tinker = $(thisPartial).data('tinker');
+        for(const key in settings) {
+            switch(key) {
+                case 'leftOffset':
+                    tinker.layout.columns[0].hOffset = settings[key];
+                    break;
+
+                case 'rightOffset':
+                    tinker.layout.columns[1].hOffset = settings[key];
+                    break;
+
+                default:
+                    tinker.layout[key] = settings[key];
+                    break;
+            }
+        }
+        tinker.update();
+    });    
+}
+*/
 

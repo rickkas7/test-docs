@@ -19,9 +19,24 @@
           "title": "Device restore",
           "detail": "Restore your device firmware to a known good state",
           "href": "/tools/device-restore/device-restore-usb/"
+        },
+        {
+          "title": "Workbench",
+          "detail": "Development environment for Particle devices",
+          "href": "/getting-started/developer-tools/workbench/"
+        },
+        {
+          "title": "Particle CLI",
+          "detail": "Command line interfface",
+          "href": "/reference/developer-tools/cli/"
+        },
+        {
+          "title": "Console",
+          "detail": "Manage devices from the Particle console",
+          "href": "/getting-started/console/console/"
         }
       ]
-    }, 
+    },
     {
       "title": "Device Doctor",
       "dir": "doctor",
@@ -60,6 +75,26 @@
       {
         "dir": "hex-generator",
         "href": "/tools/developer-tools/hex-generator/"
+      },
+      {
+        "dir": "battery-calculator",
+        "title": "Battery calculator",
+        "href": "/tools/developer-tools/battery-calculator/"
+      },
+      {
+        "dir": "configure-wi-fi",
+        "title": "Configure Wi-Fi",
+        "href": "/tools/developer-tools/configure-wi-fi/"
+      },
+      {
+        "dir": "class-generator",
+        "title": "Singleton class generator",
+        "href": "/tools/developer-tools/class-generator/"
+      },
+      {
+        "dir": "json",
+        "title": "JSON tools",
+        "href": "/tools/developer-tools/json/"
       }
     ],
     {
@@ -72,8 +107,42 @@
         "href": "/tools/cloud-tools/list-devices/"
       },
       {
+        "dir": "api-users",
+        "title": "API Users",
+        "href": "/tools/cloud-tools/api-users/"
+      },
+      {
+        "dir": "events",
+        "title": "Event viewer",
+        "href": "/tools/cloud-tools/events/"
+      },
+      {
+        "dir": "import-devices",
+        "title": "Import devices",
+        "href": "/tools/cloud-tools/import-devices/"
+      },
+      {
+        "dir": "device-remove",
+        "href": "/tools/cloud-tools/device-remove/"
+      },
+      {
         "dir": "integration-copy",
-        "href": "/tools/cloud-tools/integration-copy/"
+        "href": "/tools/cloud-tools/integration-copy-old/",
+        "internal": true
+      },
+      {
+        "title": "Cellular usage",
+        "href": "/troubleshooting/connectivity/cellular-usage/"
+      },
+      {
+        "dir": "configuration-schema",
+        "title": "Configuration schema",
+        "href": "/tools/cloud-tools/configuration-schema/"
+      },
+      {
+        "dir": "tinker",
+        "title": "Tinker",
+        "href": "/tools/cloud-tools/tinker/"
       }
     ],
     {

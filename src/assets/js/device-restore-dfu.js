@@ -227,7 +227,7 @@ async function dfuDeviceRestore(usbDevice, options) {
     }
 
 
-    ga('send', 'event', options.eventCategory, 'DFU Restore Started', options.version + '/' + options.platformVersionInfo.name);
+    analytics.track('DFU Restore Started', {category:options.eventCategory, label:options.version + '/' + options.platformVersionInfo.name});
 
     if (options.flashBackup) {
 
@@ -283,9 +283,7 @@ async function dfuDeviceRestore(usbDevice, options) {
 
         try {
             await new Promise(function(resolve, reject) {
-                // When updating this, be sure to update device-setup-usb.js. Search for:
-                // TODO: Get this from the NCP binary
-                fetch('/assets/files/tracker/tracker-esp32-ncp@0.0.7.bin')
+                fetch(options.ncpPath)
                 .then(response => response.arrayBuffer())
                 .then(function(res) {
                     ncpImage = res;
@@ -619,7 +617,7 @@ async function dfuDeviceRestore(usbDevice, options) {
             { name: 'system-part3', title: 'Device OS System Part 3' },
             { name: 'softdevice', title: 'nRF52 Soft Device' },
             { name: 'tinker', reset:true, title: 'User Firmware' },
-            { name: 'tracker-edge', reset:true, title: 'Tracker Edge Firmware' },
+            { name: 'tracker-edge', reset:true, title: 'Edge Firmware' },
             { name: 'bootloader', title: 'Device OS Bootloader' },
         ];
         // Note that other parts that don't necessarily have binaries are added below
@@ -676,6 +674,8 @@ async function dfuDeviceRestore(usbDevice, options) {
             else
             if (options.ncpUpdate) {
                 dfuParts.push({ name: 'ncp', title: 'Network Coprocessor' });
+                // NCP requires OTA flag trick
+                setOTAFlag = true;
             }
             else {
                 for(const dfuPart of allDfuPartsWithBinaries) {
@@ -1093,7 +1093,7 @@ async function dfuDeviceRestore(usbDevice, options) {
     }
 
     if (dfuErrors.length) {
-        ga('send', 'event', options.eventCategory, 'DFU Flashing Error');
+        analytics.track('DFU Flashing Error', {category:options.eventCategory});
 
         return {
             ok: false,
@@ -1103,11 +1103,12 @@ async function dfuDeviceRestore(usbDevice, options) {
         }
     }
 
-    ga('send', 'event', options.eventCategory, 'DFU Restore Success', options.version + '/' + options.platformVersionInfo.name);
+    analytics.track('DFU Restore Success', {category:options.eventCategory, label:options.version + '/' + options.platformVersionInfo.name});
 
     return {
         ok: true,
         text: 'Success!'
     }
 }
+
 

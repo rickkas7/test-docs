@@ -3,6 +3,12 @@ apiHelper.eventViewer = {};
 
 apiHelper.eventViewer.events = [];
 
+apiHelper.eventViewer.monitors = [];
+
+apiHelper.eventViewer.addMonitor = function(fn) {
+    apiHelper.eventViewer.monitors.push(fn);
+}
+
 apiHelper.eventViewer.addRow = function(eventViewerElem, event, eventsIndex) {
     const deviceFilter = $(eventViewerElem).find('.apiHelperEventViewerDeviceSelect').val();
     if (deviceFilter != 'all' && deviceFilter != event.coreid) {
@@ -20,18 +26,31 @@ apiHelper.eventViewer.addRow = function(eventViewerElem, event, eventsIndex) {
 
     const time = event.published_at.replace('T', ' ');
 
-    let html = '<tr data-events-index="' + eventsIndex + '">';
-    html += '<td class="apiHelperEventViewerEvent">' + event.name + '</td>';
-    html += '<td class="apiHelperEventViewerData">' + event.data + '</td>';
-    html += '<td class="apiHelperEventViewerDevice">' + deviceName + '</td>';
-    html += '<td class="apiHelperEventViewerTime">' + time + '</td>';
-    html += '</tr>';
+    const trElem = document.createElement('tr');
+    $(trElem).data('events-index', eventsIndex);
 
-    $(eventViewerElem).find('.apiHelperEventViewerOutput > table > tbody').prepend(html);
+    const fields = [
+        { cssClass: 'apiHelperEventViewerEvent', value: event.name},
+        { cssClass: 'apiHelperEventViewerEvent', value: event.data},
+        { cssClass: 'apiHelperEventViewerDevice', value: deviceName},
+        { cssClass: 'apiHelperEventViewerTime', value: time},
+    ];
+    for(const field of fields) {
+        const tdElem = document.createElement('td');
+        $(tdElem).addClass(field.cssClass);
+        $(tdElem).text(field.value);    
+        $(trElem).append(tdElem);
+    }
+
+    $(eventViewerElem).find('.apiHelperEventViewerOutput > table > tbody').prepend(trElem);
 };
 
 apiHelper.eventViewer.event = function(event) {
     apiHelper.eventViewer.events.push(event);
+
+    apiHelper.eventViewer.monitors.forEach(function(fn) {
+        fn(event);
+    });
 
     $('.apiHelperEventViewer').each(function(index) {
         if ($(this).find('.apiHelperEventViewerEnable').prop('checked')) {
@@ -61,7 +80,7 @@ apiHelper.eventViewer.clickRow = function(thisRowElem) {
 };
 
 apiHelper.eventViewer.start = function(elem) {
-    if (!apiHelper.eventViewer.stream) {
+    if (!apiHelper.eventViewer.stream && apiHelper.auth && apiHelper.auth.access_token) {
         apiHelper.particle.getEventStream({ deviceId: 'mine', auth: apiHelper.auth.access_token }).then(function(stream) {
             apiHelper.eventViewer.stream = stream;
             

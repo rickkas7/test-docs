@@ -1,20 +1,20 @@
-
 $(document).ready(function() {
     const eventCategory = 'Docs SSO';
 
     const localTokenSafety = 600; // amount of time in seconds before expiration to stop using it
     let auth = null;
     let localAuth;
+    let orgInfo;
 
     const handleLogin = function() {
-        ga('send', 'event', eventCategory, 'Login Started');
+        analytics.track('Login Started', {category:eventCategory});
 
         const origUrl = window.location.href;
 		window.location.href = 'https://login.particle.io/login?redirect=' + encodeURI(origUrl); 
     };
 
     const handleEditAccount = function() {
-        ga('send', 'event', eventCategory, 'Edit Account');
+        analytics.track('Edit Account', {category:eventCategory});
 
         const origUrl = window.location.href;
 		window.location.href = 'https://login.particle.io/account-info?redirect=' + encodeURI(origUrl); 
@@ -23,10 +23,12 @@ $(document).ready(function() {
     const handleLogout = function() {
         localStorage.removeItem('particleAuth'); // No longer used, but if present, remove
         localStorage.removeItem('apiHelperOrg')
+        localStorage.removeItem('apiHelperLocalLogin');
+        localStorage.removeItem('apiHelperTestLogin');
+        localStorage.removeItem('savedSearch');
 
         if (typeof apiHelper != 'undefined' && apiHelper.localLogin && apiHelper.localLogin.access_token ) {
-            ga('send', 'event', eventCategory, 'Logged Out Local');
-            localStorage.removeItem('apiHelperLocalLogin');
+            analytics.track('Logged Out Local', {category:eventCategory});
 
             if (!apiHelper.localLogin.tokenLogin) {
                 // Invalidate the token on the cloud side
@@ -48,8 +50,7 @@ $(document).ready(function() {
             location.reload();   
         }
         else {
-            ga('send', 'event', eventCategory, 'Logged Out SSO');
-            localStorage.removeItem('apiHelperTestLogin');
+            analytics.track('Logged Out SSO', {category:eventCategory});
             const origUrl = window.location.href;
             window.location.href = 'https://login.particle.io/logout?redirect=' + encodeURI(origUrl);     
         }
@@ -149,6 +150,11 @@ $(document).ready(function() {
 
             $('#userMenuLogout > a').on('click', handleLogout);
         
+            if (auth.username.endsWith('particle.io')) {
+                $('.internalMenuItem').show();
+                internalMenuItem = true;
+            }
+
         };
         const showNotLoggedIn = function() {
             $('#userMenuLabel').text('User');
@@ -178,6 +184,10 @@ $(document).ready(function() {
         }
         else {
             showNotLoggedIn();
+        }
+        if (window.location.href.startsWith('http://localhost')) {
+            $('.internalMenuItem').show();
+            internalMenuItem = true;
         }
 
         if (typeof apiHelper != 'undefined') {
@@ -228,10 +238,11 @@ $(document).ready(function() {
     const checkOrgs = async function() {
         const selectOrg = $('.apiHelperSSO').data('select-org');
         if (selectOrg) {
-            let orgInfo;
+            let showContent = false;
+
             try {
                 orgInfo = JSON.parse(localStorage.getItem('apiHelperOrg'));
-                if (!apiHelper.auth || orgInfo.username != apiHelper.auth.username) {
+                if (!apiHelper.auth || orgInfo.username != apiHelper.auth.username || !orgInfo.agreements) {
                     // Username changed, ignore cached 
                     orgInfo = null;
                 }
@@ -241,19 +252,56 @@ $(document).ready(function() {
             if (!orgInfo) {
                 orgInfo = {};
             }
-    
+            apiHelper.orgInfo = orgInfo;
+            apiHelper.canSubmitTickets = false;
+
             const saveOrgInfo = function() {
                 localStorage.setItem('apiHelperOrg', JSON.stringify(orgInfo));
                 $('.apiHelper').trigger('selectedOrgUpdated');
             };
     
             if (!orgInfo.orgList && apiHelper.auth) {
-                // Fetch organization list
                 try {
+                    // Fetch organization list
                     orgInfo.username = apiHelper.auth.username;
                     orgInfo.orgList = await apiHelper.getOrgs();
+
+                    // Fetch service agreements
+                    orgInfo.agreements = {};
+
+                    for(const org of orgInfo.orgList.organizations) {
+                        await new Promise(function(resolve) {
+                            $.ajax({
+                                dataType: 'json',
+                                data: {
+                                    'access_token': apiHelper.auth.access_token
+                                },
+                                error: function(err) {
+                                    // If unable to get agreements, still show enterprise for now
+                                    console.log('error getting service agreements', err);
+                                    resolve();
+                                },
+                                method: 'GET',
+                                success: function (resp, textStatus, jqXHR) {
+                                    orgInfo.agreements[org.id] = resp.data;
+                                    for(const obj of resp.data) {
+                                        const agreementType = obj.attributes.agreement_type;
+                                        if (agreementType == 'enterprise') {
+                                            orgInfo.isEnterprise = true;
+                                            apiHelper.canSubmitTickets = true;
+                                        }
+                                    }
+                                    resolve();
+                                },
+                                url: 'https://api.particle.io/v1/orgs/' + org.id + '/service_agreements/',
+                            });
+                    
+    
+                        });
+                    }
                 }
                 catch(e) {
+                    console.log('exception fetching org', e);
                 }
             }
             if (orgInfo.orgList) {
@@ -278,6 +326,22 @@ $(document).ready(function() {
                             id: orgId,
                             name: orgInfo.orgList.organizations.find(e => e.id == orgId).name,
                         }    
+
+                        $('.apiHelperContentGuard').each(function() {
+                            const guardedElem = $(this);
+                            const guardMode = $(guardedElem).data('mode');
+
+                            if (guardMode == 'orgRequired') {
+                                showContent = true;
+                                $(guardedElem).show()
+                            }
+                            else if (guardMode == 'enterpriseRequired') {
+                                if (orgInfo.isEnterprise) {
+                                    showContent = true;
+                                    $(guardedElem).show()
+                                }
+                            }        
+                        });                        
                     }
                     updateSelectedOrg();
                     
@@ -290,6 +354,19 @@ $(document).ready(function() {
                 }
                 saveOrgInfo();
             }    
+
+            $('.apiHelperContentGuard').each(function() {
+                const guardedElem = $(this);
+                const guardMode = $(guardedElem).data('mode');
+
+                if (guardMode == 'loggedIn' && apiHelper.auth) {
+                    showContent = true;
+                    $(guardedElem).show()
+                }
+            });
+            if (!showContent) {
+                $('.apiHelperContentGuardElse').show();
+            }
         }
         else {
             $('.apiHelperSsoSelectOrg').hide();
@@ -488,4 +565,5 @@ $(document).ready(function() {
 
     });
 });
+
 
