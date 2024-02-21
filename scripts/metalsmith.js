@@ -60,7 +60,6 @@ const navMenuGenerator = require('./nav_menu_generator.js').metalsmith;
 const pinInfoGenerator = require('./pininfo-generator.js').metalsmith;
 const systemVersion = require('./system-version.js');
 const sharedBlurb = require('./shared-blurb.js');
-const setupFirmware = require('./setup-firmware.js');
 const troubleshooting = require('./troubleshooting.js').metalsmith;
 
 var handlebars = require('handlebars');
@@ -159,13 +158,6 @@ exports.metalsmith = function () {
     .use(sharedBlurb({
       contentDir: '../src/content',
       config: '../config/sharedBlurbs.json'
-    }))
-    .use(setupFirmware({
-      contentDir: '../src/content',
-      filesDir: '../src/assets/files',
-      sources: [
-        'troubleshooting/connectivity/cloud-debug.md',
-      ],
     }))
     // Duplicate files that have the devices frontmatter set and make one copy for each device
     // The original file will be replaced by a redirect link
