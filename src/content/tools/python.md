@@ -20,13 +20,20 @@ This project works on Particle Gen 4 devices including the P2, Photon 2, and M-S
 
 In order to use Python on your Particle device, you must flash firmware to the device to enable that functionality.
 
-## Connect
+## Connect (USB)
 
 This project is intended for development, testing, and experimentation. For this reason, the device must be connected 
 to USB to this computer to use this tool in order to upload Python scripts, view debug logs, and view Python output
 at this time.
 
 {{> python-connect}}
+
+## Connect (OTA)
+
+Some operations are possible through the Particle cloud, as well. You can select a device in your sandbox
+account here to enable this feature if logged in (above). This will consume data operations.
+
+{{> python-device}}
 
 ## Python standard output viewer
 

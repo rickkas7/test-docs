@@ -36,6 +36,9 @@ $(document).ready(function() {
 
             python.usbConnected = true;
             python.updateConnectUI(false);
+
+            python.deviceId = python.usbDevice.id;
+            $('.pythonDeviceSelect').val(python.deviceId);
         }
         catch(e) {
             console.log('failed to connect', e);
@@ -67,4 +70,16 @@ $(document).ready(function() {
 
     });
   
+    apiHelper.deviceList('.pythonDeviceSelect', {
+        getTitle: function (dev) {
+            return dev.name + ' (' + dev.id + ')' + (dev.online ? '' : ' (offline)');
+        },
+        hasRefresh: true,
+        onChange: function (elem) {
+            const deviceId = $(elem).val();
+
+            console.log('selected ' + deviceId);
+        }
+    });   
+
 });
