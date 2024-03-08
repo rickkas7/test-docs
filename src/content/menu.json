@@ -1,10 +1,6 @@
 {
     "items":[
         {
-            "title": "Tutorials",
-            "href": "/tutorials/"
-        },
-        {
             "title": "Tools",
             "href": "/tools/"
         }

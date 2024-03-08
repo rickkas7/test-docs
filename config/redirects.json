@@ -1,3 +1,5 @@
 {
-  "/tutorials":"/tutorials/webhook"
+  "/tutorials":"/tutorials/webhook",
+  "/tools":"/tools/tools",
+  "/tools/python/python":"/tools/python"
 }

@@ -8417,6 +8417,10 @@
         "tools/device-restore/device-restore-usb-old.md": {
             "hash": "759d6a3add959f68f9d1caa72a636cd31e37140d100327e32c795fba2f9efd44",
             "date": "2024-02-21"
+        },
+        "tools/python.md": {
+            "hash": "9f3f03db673db00b426e5fe32098ef62517887140333b83bedeee93b1b0e8b4e",
+            "date": "2024-03-08"
         }
     }
 }
