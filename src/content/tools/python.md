@@ -23,15 +23,15 @@ In order to use Python on your Particle device, you must flash firmware to the d
 ## Connect (USB)
 
 This project is intended for development, testing, and experimentation. For this reason, the device must be connected 
-to USB to this computer to use this tool in order to upload Python scripts, view debug logs, and view Python output
-at this time.
+to USB to this computer to use this tool in order to view debug logs and view Python output at this time. Sending
+scripts by USB instead of OTA also conserves data operations.
 
 {{> python-connect}}
 
 ## Connect (OTA)
 
 Some operations are possible through the Particle cloud, as well. You can select a device in your sandbox
-account here to enable this feature if logged in (above). This will consume data operations.
+account here to enable this feature if logged in.
 
 {{> python-device}}
 
@@ -47,6 +47,10 @@ This section shows the Python standard output from the `print` command in a Pyth
 This section shows the device debug logs, the USB serial logs that can also be displayed using `particle serial monitor`.
 
 {{> python-debug-logs cols="90" rows="10"}}
+
+## Device status control
+
+## Python script management
 
 
 ## Event viewer
