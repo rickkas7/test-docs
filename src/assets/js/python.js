@@ -37,9 +37,7 @@ $(document).ready(function() {
         let dataObj = null;
 
         try {
-            console.log('sendControlRequest reqObj', reqObj);
             const res =  await python.usbDevice.sendControlRequest(10, JSON.stringify(reqObj));    
-            console.log('sendControlRequest res', res);
             if (res.result == 0 && res.data && res.data.length > 0) {
                 dataObj = JSON.parse(res.data);
             }    
@@ -67,7 +65,14 @@ $(document).ready(function() {
         try {
             python.nativeUsbDevice = await navigator.usb.requestDevice({ filters: filters });
 
+            python.updateConnectStatus('Attempting to connect by USB...');
+
             python.usbDevice = await ParticleUsb.openNativeUsbDevice(python.nativeUsbDevice, {});
+
+            python.updateConnectStatus('Connected!');
+            setTimeout(function() {
+                python.updateConnectStatus('');
+            }, 2000);
 
             python.usbConnected = true;
             python.updateConnectUI(false);
@@ -75,6 +80,7 @@ $(document).ready(function() {
             python.selectDevice(python.usbDevice.id);
 
             $('.pythonDebugLogsTextArea,.pythonOutputTextArea').val('');
+
 
             const msg = 'Connected by USB!\n';
             python.appendDebugLog(msg)
@@ -88,22 +94,30 @@ $(document).ready(function() {
                             console.log('sending status request');
                             const reqObj = {
                                 op: 'status',
-                                flags: 0x03,
+                                flags: 0x07,
                             };
                             const dataObj = await python.sendControlRequest(reqObj);
                             console.log('dataObj', dataObj);    
+
+                            if (dataObj.out && dataObj.out.length) {
+                                python.appendOutput(dataObj.out);
+                            }
+                            if (dataObj.log && dataObj.log.length) {
+                                python.appendDebugLog(dataObj.log);
+                            }
                         }
                         catch(e) {
                             console.log('exception in status request', e);
                         }
                         python.statusActive = false;
                     }
-                }, 10000);
+                }, 2000);
             }
     
         }
         catch(e) {
             console.log('failed to connect', e);
+            python.updateConnectUI();
             return;
         }
 
