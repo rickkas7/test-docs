@@ -3,7 +3,7 @@ title: Python
 columns: two
 layout: commonTwo.hbs
 description: Python
-includeDefinitions: [api-helper, api-helper-events, api-helper-extras, api-helper-usb, python]
+includeDefinitions: [api-helper, api-helper-events, api-helper-extras, api-helper-usb, codemirror, python]
 ---
 
 # {{title}}

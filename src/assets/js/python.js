@@ -198,7 +198,7 @@ $(document).ready(function() {
         let restoreDefault = true;
 
         if (python.usbConnected) {
-            const script = $('.pythonScriptTextArea').val();
+            const script = python.scriptCodeMirror.getValue();
             if (script.length) {
                 restoreDefault = false;
 
@@ -225,7 +225,7 @@ $(document).ready(function() {
 
         await python.sendControlRequestJSON({
             op: 'run',
-            script: $('.pythonScriptTextArea').val(),
+            script: python.scriptCodeMirror.getValue(),
         });
 
         $('.pythonScriptSendUSB').prop('disabled', false);
@@ -244,6 +244,35 @@ $(document).ready(function() {
         }
     });
 
+    $('.pythonScriptTextArea').each(function() {
+            
+        python.scriptCodeMirror = CodeMirror.fromTextArea($(this)[0], {
+            gutters: [], // "CodeMirror-lint-markers"
+            lineNumbers: true,
+            /*
+            lint: {
+                "getAnnotations": function(cm, updateLinting, options) {
+                    const errors = CodeMirror.lint.json(cm);
+                    
+                    if (errors.length == 0) {
+                        $(parentElem).find('.apiHelperJsonLinterValidOnlyButton').removeAttr('disabled');
+                    }
+                    else {
+                        $(parentElem).find('.apiHelperJsonLinterValidOnlyButton').attr('disabled', 'disabled');
+                    }
+
+                    const event = new CustomEvent('linted', { errors: errors });
+                    $(parentElem)[0].dispatchEvent(event);
+
+                    updateLinting(errors);
+                },
+                "async": true
+            },
+            */
+            mode: "text/x-python", 
+        });
+    });
+
     $('.pythonSamples').on('change', async function() {
         const filename = $('.pythonSamples').val();
         if (filename == '-') {
@@ -260,7 +289,7 @@ $(document).ready(function() {
 
         console.log('sample', scriptText);
 
-        $('.pythonScriptTextArea').val(scriptText);
+        python.scriptCodeMirror.setValue(scriptText);
         $('.pythonScriptTextArea').focus();
     });
     
