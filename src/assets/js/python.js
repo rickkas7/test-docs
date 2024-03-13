@@ -33,7 +33,7 @@ $(document).ready(function() {
         $('.apiHelperEventViewerDeviceSelect').val(python.deviceId);
     }
 
-    python.sendControlRequest = async function(reqObj) {
+    python.sendControlRequestJSON = async function(reqObj) {
         let dataObj = null;
 
         try {
@@ -45,13 +45,48 @@ $(document).ready(function() {
         catch(e) {
             console.log('exception getting control request', e);
         }
-    return dataObj;
+        return dataObj;
+    }
+
+    python.sendControlRequestString = async function(reqObj) {
+        let resultStr = "";
+
+        try {
+            const res =  await python.usbDevice.sendControlRequest(10, JSON.stringify(reqObj));    
+            if (res.result == 0 && res.data) {
+                resultStr = res.data;
+            }    
+        }
+        catch(e) {
+            console.log('exception getting control request', e);
+        }
+        return resultStr;
     }
 
     if (!navigator.usb) {
         python.updateConnectStatus('Your web browser does not support WebUSB and cannot be used.');
         python.updateConnectUI(true);
         return;
+    }
+
+    python.checkStatus = async function() {
+        try {
+            console.log('sending status request');
+            const dataObj = await python.sendControlRequestJSON({op:'status'});
+            console.log('dataObj', dataObj);    
+
+            if (dataObj.output) {
+                let s = await python.sendControlRequestString({op:'output'});
+                python.appendOutput(s);
+            }
+            if (dataObj.logs) {
+                let s = await python.sendControlRequestString({op:'logs'});
+                python.appendDebugLog(s);
+            }
+        }
+        catch(e) {
+            console.log('exception in status request', e);
+        }
     }
 
 
@@ -90,25 +125,7 @@ $(document).ready(function() {
                 python.statusTimer = setInterval(async function() {
                     if (!python.statusActive) {
                         python.statusActive = true;
-                        try {
-                            console.log('sending status request');
-                            const reqObj = {
-                                op: 'status',
-                                flags: 0x07,
-                            };
-                            const dataObj = await python.sendControlRequest(reqObj);
-                            console.log('dataObj', dataObj);    
-
-                            if (dataObj.out && dataObj.out.length) {
-                                python.appendOutput(dataObj.out);
-                            }
-                            if (dataObj.log && dataObj.log.length) {
-                                python.appendDebugLog(dataObj.log);
-                            }
-                        }
-                        catch(e) {
-                            console.log('exception in status request', e);
-                        }
+                        await python.checkStatus();
                         python.statusActive = false;
                     }
                 }, 2000);
