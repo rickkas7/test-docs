@@ -19,11 +19,19 @@ $(document).ready(function() {
         const elem = $('.pythonDebugLogsTextArea');
         let old = $(elem).val(); 
         $(elem).val(old + s);
+
+        if ($('.pythonDebugLogsScrollToEnd').prop('checked')) {
+            elem[0].scrollTop = elem[0].scrollHeight;
+        }
     }
     python.appendOutput = function(s) {
         const elem = $('.pythonOutputTextArea');
         let old = $(elem).val(); 
         $(elem).val(old + s);
+
+        if ($('.pythonOutputScrollToEnd').prop('checked')) {
+            elem[0].scrollTop = elem[0].scrollHeight;            
+        }
     }
 
     python.selectDevice = function(deviceId) {
@@ -71,15 +79,14 @@ $(document).ready(function() {
 
     python.checkStatus = async function() {
         try {
-            console.log('sending status request');
-            const dataObj = await python.sendControlRequestJSON({op:'status'});
-            console.log('dataObj', dataObj);    
+            const statusObj = await python.sendControlRequestJSON({op:'status'});
+            // console.log('statusObj', statusObj);    
 
-            if (dataObj.output) {
+            if (statusObj.output) {
                 let s = await python.sendControlRequestString({op:'output'});
                 python.appendOutput(s);
             }
-            if (dataObj.logs) {
+            if (statusObj.logs) {
                 let s = await python.sendControlRequestString({op:'logs'});
                 python.appendDebugLog(s);
             }
@@ -88,7 +95,6 @@ $(document).ready(function() {
             console.log('exception in status request', e);
         }
     }
-
 
     $('.pythonConnectConnect').on('click', async function() {
         python.updateConnectUI(true);
@@ -121,6 +127,9 @@ $(document).ready(function() {
             python.appendDebugLog(msg)
             python.appendOutput(msg);
 
+            $('.pythonConnectedUSB').prop('disabled', false);
+            python.updateSendUSB();
+            
             if (!python.statusTimer) {
                 python.statusTimer = setInterval(async function() {
                     if (!python.statusActive) {
@@ -128,7 +137,7 @@ $(document).ready(function() {
                         await python.checkStatus();
                         python.statusActive = false;
                     }
-                }, 2000);
+                }, 500);
             }
     
         }
@@ -162,6 +171,9 @@ $(document).ready(function() {
         python.appendDebugLog(msg)
         python.appendOutput(msg)    
 
+        $('.pythonConnectedUSB').prop('disabled', true);
+        python.updateSendUSB();
+
         python.usbDevice = null;
         python.nativeUsbDevice = null;
         python.usbConnected = false;
@@ -179,6 +191,85 @@ $(document).ready(function() {
             python.selectDevice($(elem).val());
         }
     });   
+
+    python.updateSendUSB = function() {
+        const defaultTitle = 'Send script by USB and run';
+        const shortcutMsg = ' (Shift-Return)';
+        let restoreDefault = true;
+
+        if (python.usbConnected) {
+            const script = $('.pythonScriptTextArea').val();
+            if (script.length) {
+                restoreDefault = false;
+
+                if ($(document.activeElement).hasClass('pythonScriptTextArea')) {
+                    $('.pythonScriptSendUSB').text(defaultTitle + shortcutMsg);
+                }
+                else {
+                    $('.pythonScriptSendUSB').text(defaultTitle);
+                }
+                $('.pythonScriptSendUSB').prop('disabled', false);                        
+            }
+        }
+        
+        if (restoreDefault) {
+            $('.pythonScriptSendUSB').text(defaultTitle);
+            $('.pythonScriptSendUSB').prop('disabled', true);        
+        }
+    };
+
+    $('.pythonScriptTextArea').on('input change focus blur', python.updateSendUSB);
+
+    $('.pythonScriptSendUSB').on('click', async function() {
+        $('.pythonScriptSendUSB').prop('disabled', true);
+
+        await python.sendControlRequestJSON({
+            op: 'run',
+            script: $('.pythonScriptTextArea').val(),
+        });
+
+        $('.pythonScriptSendUSB').prop('disabled', false);
+        $('.pythonScriptTextArea').focus();
+    });
+
+
+    $('.pythonScriptTextArea').on('keydown', function(ev) {
+        if (ev.key != 'Enter' || !ev.shiftKey) {
+            return;
+        }
+        
+        if (!$('.pythonScriptSendUSB').prop('disabled')) {
+            $('.pythonScriptSendUSB').trigger('click');
+            ev.preventDefault();    
+        }
+    });
+
+    $('.pythonSamples').on('change', async function() {
+        const filename = $('.pythonSamples').val();
+        if (filename == '-') {
+            return;
+        }
+
+        const scriptText = await new Promise(function(resolve, reject) {
+            const fetchRes = fetch('/assets/files/python-samples/' + filename)
+            .then(response => response.text())
+            .then(function(result) {
+                resolve(result);
+            });
+        });
+
+        console.log('sample', scriptText);
+
+        $('.pythonScriptTextArea').val(scriptText);
+        $('.pythonScriptTextArea').focus();
+    });
+    
+    {
+        // Load example code
+        // TODO: Only do this if the previous code was not saved in local storage
+        $('.pythonSamples').val('hello-world.py');
+        $('.pythonSamples').trigger('change');
+    }
 
     {
         const msg = 'This section will be updated when connected by USB\n';

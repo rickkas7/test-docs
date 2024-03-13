@@ -35,6 +35,10 @@ account here to enable this feature if logged in.
 
 {{> python-device}}
 
+## Python script
+
+{{> python-script cols="90" rows="10"}}
+
 ## Python standard output viewer
 
 This section shows the Python standard output from the `print` command in a Python script.
@@ -49,6 +53,8 @@ This section shows the device debug logs, the USB serial logs that can also be d
 {{> python-debug-logs cols="90" rows="10"}}
 
 ## Device status control
+
+{{> python-control}}
 
 ## Python script management
 
