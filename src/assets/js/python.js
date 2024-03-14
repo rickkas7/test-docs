@@ -15,22 +15,31 @@ $(document).ready(function() {
         $('.pythonConnectStatus').text(s);
     }
 
-    python.appendDebugLog = function(s) {
-        const elem = $('.pythonDebugLogsTextArea');
-        let old = $(elem).val(); 
-        $(elem).val(old + s);
+    python.appendLog = function(s, where = {debug: true, output: true}) {
+        const destLogs = [
+            {
+                key: 'debug',
+                elemSelector: '.pythonDebugLogsTextArea',
+                scrollSelector: '.pythonDebugLogsScrollToEnd',
+            },
+            {
+                key: 'output',
+                elemSelector: '.pythonOutputTextArea',
+                scrollSelector: '.pythonOutputScrollToEnd',
+            },
+        ];
 
-        if ($('.pythonDebugLogsScrollToEnd').prop('checked')) {
-            elem[0].scrollTop = elem[0].scrollHeight;
-        }
-    }
-    python.appendOutput = function(s) {
-        const elem = $('.pythonOutputTextArea');
-        let old = $(elem).val(); 
-        $(elem).val(old + s);
-
-        if ($('.pythonOutputScrollToEnd').prop('checked')) {
-            elem[0].scrollTop = elem[0].scrollHeight;            
+        for(const destLog of destLogs) {
+            if (!where[destLog.key]) {
+                continue;
+            }
+            const elem = $(destLog.elemSelector);
+            let old = $(elem).val(); 
+            $(elem).val(old + s);
+    
+            if ($(destLog.scrollSelector).prop('checked')) {
+                elem[0].scrollTop = elem[0].scrollHeight;
+            }   
         }
     }
 
@@ -70,7 +79,7 @@ $(document).ready(function() {
             },
             json: false,
             cb: async function(s) {
-                python.appendOutput(s);
+                python.appendLog(s, {output: true});
             },
         });
     }
@@ -81,7 +90,7 @@ $(document).ready(function() {
             },
             json: false,
             cb: async function(s) {
-                python.appendDebugLog(s);
+                python.appendLog(s, {debug: true});
             },
         });
     }
@@ -168,6 +177,8 @@ $(document).ready(function() {
                 python.deviceTaskQueue = [];
 
                 if ($('.pythonAutoReconnect').prop('checked')) {
+                    python.appendLog('Attempting automatic reconnection...\n', {debug: true, output: true});
+
                     for(let tries = 1; !python.nativeUsbDevice && !python.isConnecting; tries++) {
 
                         python.updateConnectStatus('Waiting before reconnecting (attempt ' + tries + ')...');
@@ -194,7 +205,7 @@ $(document).ready(function() {
                         }    
                     }
                     if (python.nativeUsbDevice) {
-                        python.connected();
+                        python.connected({clearStatus:false});
                     }
                 }
                 else {
@@ -209,7 +220,7 @@ $(document).ready(function() {
     };
     python.runDeviceTaskQueue(); // Run asynchronously
 
-    python.connected = async function() {
+    python.connected = async function(options = {}) {
         python.updateConnectStatus('Attempting to connect by USB...');
 
         python.usbDevice = await ParticleUsb.openNativeUsbDevice(python.nativeUsbDevice, {});
@@ -224,16 +235,87 @@ $(document).ready(function() {
 
         python.selectDevice(python.usbDevice.id);
 
-        $('.pythonDebugLogsTextArea,.pythonOutputTextArea').val('');
+        if (options.clearStatus) {
+            $('.pythonDebugLogsTextArea,.pythonOutputTextArea').val('');
+        }
 
-
-        const msg = 'Connected by USB!\n';
-        python.appendDebugLog(msg)
-        python.appendOutput(msg);
+        python.appendLog('Connected by USB!\n', {debug: true, output: true});
 
         $('.pythonConnectedUSB').prop('disabled', false);
         python.updateSendUSB();
-        
+     
+        python.deviceTaskQueue.push({
+            reqObj: {
+                op: 'list',
+            },
+            json: true,
+            cb: async function(statusObj) {
+                $('.pythonScriptManagementList').empty();
+                // console.log('statusObj', statusObj);
+
+                for(const entry of statusObj.scripts) {
+                    const trElem = document.createElement('tr');
+
+                    {
+                        const tdElem = document.createElement('td');
+                        $(tdElem).text(entry.name);
+                        $(trElem).append(tdElem);
+                    }
+                    {
+                        const tdElem = document.createElement('td');
+                        $(tdElem).text(entry.size);
+                        $(trElem).append(tdElem);
+                    }
+                    {
+                        const tdElem = document.createElement('td');
+
+                        const appendButton = function(options) {
+                            const buttonElem = options.buttonElem = document.createElement('button');
+                            $(buttonElem).css('height', '20px');
+                            $(buttonElem).css('font-size', '12px');
+                            $(buttonElem).css('line-height', '14px');
+                            $(buttonElem).css('margin-left', '10px');
+                            $(buttonElem).text(options.title);
+                            $(buttonElem).on('click', options.click);
+                            $(tdElem).append(buttonElem);
+                        }
+                        appendButton({
+                            title: 'Run',
+                            click: function() {
+                                $(options.buttonElem).prop('disabled', true);
+                                
+                                console.log('click run', entry);
+                                python.deviceTaskQueue.push({
+                                    reqObj: {
+                                        op: 'run',
+                                        name: options.name,
+                                    },
+                                    json: true,
+                                    cb: async function(resultObj) {
+                                    },
+                                });
+                        
+                                setTimeout(function() {
+                                    $(options.buttonElem).prop('disabled', false);
+                                }, 500);
+                            },
+                        });
+                        appendButton({
+                            title: 'Delete',
+                            click: function() {
+                                console.log('click delete', entry);
+                            },
+                        });
+
+
+                        $(trElem).append(tdElem);
+                    }
+
+                    $('.pythonScriptManagementList').append(trElem);
+                }
+            },
+        })
+
     }
 
     python.disconnected = async function() {
@@ -247,9 +329,7 @@ $(document).ready(function() {
         }
         python.nativeUsbDevice = null;
 
-        const msg = 'Disconnected from USB. This section will update only when connected.\n';
-        python.appendDebugLog(msg)
-        python.appendOutput(msg)    
+        python.appendLog('Disconnected from USB. This section will update only when connected.\n', {debug: true, output: true});
 
         $('.pythonConnectedUSB').prop('disabled', true);
         python.updateSendUSB();
@@ -274,7 +354,7 @@ $(document).ready(function() {
         try {
             python.nativeUsbDevice = await navigator.usb.requestDevice({ filters: filters });
 
-            await python.connected();
+            await python.connected({clearStatus: true});
         }
         catch(e) {
             console.log('failed to connect', e);
@@ -300,6 +380,31 @@ $(document).ready(function() {
             python.selectDevice($(elem).val());
         }
     });   
+
+    python.uploadScript = function(script, options = {}) {
+        // name, data, offset
+
+        for(let offset = 0; offset < script.length; offset += 512) {
+            let len = 512;
+            if (len > script.length - offset) {
+                len = script.length - offset;
+            }
+
+            python.deviceTaskQueue.push({
+                reqObj: {
+                    op: 'upload',
+                    name: options.name,
+                    data: script.substring(offset, len),
+                    offset,
+                },
+                json: true,
+                cb: async function(resultObj) {
+                },
+            });
+        }
+        
+        
+    }
 
     python.updateSendUSB = function() {
         const defaultTitle = 'Send script by USB and run';
@@ -332,10 +437,14 @@ $(document).ready(function() {
     $('.pythonScriptSendUSB').on('click', async function() {
         $('.pythonScriptSendUSB').prop('disabled', true);
 
+        const scriptName = 'unsaved.py';
+
+        python.uploadScript(python.scriptCodeMirror.getValue(), {name: scriptName});
+
         python.deviceTaskQueue.push({
             reqObj: {
                 op: 'run',
-                script: python.scriptCodeMirror.getValue(),
+                name: scriptName,
             },
             json: true,
             cb: async function(resultObj) {
@@ -417,9 +526,7 @@ $(document).ready(function() {
     }
 
     {
-        const msg = 'This section will be updated when connected by USB\n';
-        python.appendDebugLog(msg);
-        python.appendOutput(msg);       
+        python.appendLog('This section will be updated when connected by USB\n', {output: true, debug: true});
     }
 
 });

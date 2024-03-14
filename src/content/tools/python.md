@@ -58,6 +58,8 @@ This section shows the device debug logs, the USB serial logs that can also be d
 
 ## Python script management
 
+{{> python-script-management }}
+
 
 ## Event viewer
 
