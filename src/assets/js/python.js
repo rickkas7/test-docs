@@ -41,35 +41,6 @@ $(document).ready(function() {
         $('.apiHelperEventViewerDeviceSelect').val(python.deviceId);
     }
 
-    python.sendControlRequestJSON = async function(reqObj) {
-        let dataObj = null;
-
-        try {
-            const res =  await python.usbDevice.sendControlRequest(10, JSON.stringify(reqObj));    
-            if (res.result == 0 && res.data && res.data.length > 0) {
-                dataObj = JSON.parse(res.data);
-            }    
-        }
-        catch(e) {
-            console.log('exception getting control request', e);
-        }
-        return dataObj;
-    }
-
-    python.sendControlRequestString = async function(reqObj) {
-        let resultStr = "";
-
-        try {
-            const res =  await python.usbDevice.sendControlRequest(10, JSON.stringify(reqObj));    
-            if (res.result == 0 && res.data) {
-                resultStr = res.data;
-            }    
-        }
-        catch(e) {
-            console.log('exception getting control request', e);
-        }
-        return resultStr;
-    }
 
     if (!navigator.usb) {
         python.updateConnectStatus('Your web browser does not support WebUSB and cannot be used.');
@@ -77,96 +48,205 @@ $(document).ready(function() {
         return;
     }
 
-    python.checkStatus = async function() {
-        try {
-            const statusObj = await python.sendControlRequestJSON({op:'status'});
-            // console.log('statusObj', statusObj);    
-
-            if (statusObj.output) {
-                let s = await python.sendControlRequestString({op:'output'});
-                python.appendOutput(s);
-            }
-            if (statusObj.logs) {
-                let s = await python.sendControlRequestString({op:'logs'});
-                python.appendDebugLog(s);
-            }
-        }
-        catch(e) {
-            console.log('exception in status request', e);
-        }
+    python.delayMs = async function(ms) {
+        await new Promise(function(resolve, reject) {
+            setTimeout(function() {
+                resolve();
+            }, ms);
+        }); 
     }
 
-    $('.pythonConnectConnect').on('click', async function() {
-        python.updateConnectUI(true);
+    // Task queue objects:
+    // reqObj: control request object or 
+    // reqString string request
+    // json: true if result is JSON
+    // cb: async callback function to call parameter is the control request data
+    python.deviceTaskQueue = [];
 
-        // TODO: Also filter on device?
-        const filters = [
-            {vendorId: 0x2b04}
-        ];
-        try {
-            python.nativeUsbDevice = await navigator.usb.requestDevice({ filters: filters });
+    python.queueOutputRequest = function() {
+        python.deviceTaskQueue.push({
+            reqObj: {
+                op: 'output',
+            },
+            json: false,
+            cb: async function(s) {
+                python.appendOutput(s);
+            },
+        });
+    }
+    python.queueLogsRequest = function() {
+        python.deviceTaskQueue.push({
+            reqObj: {
+                op: 'logs',
+            },
+            json: false,
+            cb: async function(s) {
+                python.appendDebugLog(s);
+            },
+        });
+    }
 
-            python.updateConnectStatus('Attempting to connect by USB...');
 
-            python.usbDevice = await ParticleUsb.openNativeUsbDevice(python.nativeUsbDevice, {});
+    python.queueStatusRequest = function() {
+        python.deviceTaskQueue.push({
+            reqObj: {
+                op: 'status',
+            },
+            json: true,
+            cb: async function(statusObj) {
+                if (statusObj.output) {
+                    python.queueOutputRequest();
+                }
+                if (statusObj.logs) {
+                    python.queueLogsRequest();
+                }
+    
+            },
+        })
 
-            python.updateConnectStatus('Connected!');
-            setTimeout(function() {
-                python.updateConnectStatus('');
-            }, 2000);
+    };
 
-            python.usbConnected = true;
-            python.updateConnectUI(false);
+    python.runDeviceTaskQueue = async function() {
 
-            python.selectDevice(python.usbDevice.id);
+        while(true) {
+            // Wait until USB connected
+            if (!python.usbConnected) {
+                await python.delayMs(500);
+                continue;
+            }
+            const deviceId = python.usbDevice.id;
 
-            $('.pythonDebugLogsTextArea,.pythonOutputTextArea').val('');
+            if (!python.lastStatusMs || Date.now() - python.lastStatusMs >= 500) {
+                python.lastStatusMs = Date.now();
+                python.queueStatusRequest();
+            }
 
 
-            const msg = 'Connected by USB!\n';
-            python.appendDebugLog(msg)
-            python.appendOutput(msg);
+            // Process queue
+            const task = python.deviceTaskQueue.shift();
+            if (!task) {
+                // console.log('no tasks');
+                await python.delayMs(500);
+                continue;
+            }
 
-            $('.pythonConnectedUSB').prop('disabled', false);
-            python.updateSendUSB();
-            
-            if (!python.statusTimer) {
-                python.statusTimer = setInterval(async function() {
-                    if (!python.statusActive) {
-                        python.statusActive = true;
-                        await python.checkStatus();
-                        python.statusActive = false;
+            let isError = true;
+            // console.log('running task', task);
+
+            try {
+                const res =  await python.usbDevice.sendControlRequest(10, task.reqObj ? JSON.stringify(task.reqObj) : task.reqString);    
+                if (res.result == 0) {
+                    if (task.json) {
+                        if (res.data && res.data.length >= 2) {
+                            const dataObj = JSON.parse(res.data);
+                            // console.log('json task completed', dataObj);
+                            await task.cb(dataObj);
+                            isError = false;
+                        }
+                        else {
+                            console.log('control request data too small for json', res.data);
+                        }
                     }
-                }, 500);
+                    else {
+                        await task.cb(res.data);
+                        isError = false;
+                    }
+                }
+                else {
+                    console.log('control request result error', res.result);
+                }
+            }
+            catch(e) {
+                console.log('exception getting control request', e);
             }
     
+            if (isError) {
+                // Update UI and state variables that we're no longer USB connected
+                python.disconnected();
+
+                // Empty queue
+                python.deviceTaskQueue = [];
+
+                if ($('.pythonAutoReconnect').prop('checked')) {
+                    for(let tries = 1; !python.nativeUsbDevice && !python.isConnecting; tries++) {
+
+                        python.updateConnectStatus('Waiting before reconnecting (attempt ' + tries + ')...');
+                        await python.delayMs(3000);
+                        if (python.isConnecting) {
+                            // User manually initiated reconnecting
+                            break;
+                        }
+
+                        try {                    
+                            const nativeUsbDevices = await navigator.usb.getDevices();
+        
+                            if (nativeUsbDevices.length > 0) {
+                                for(let dev of nativeUsbDevices) {
+                                    if (dev.serialNumber == deviceId) {
+                                        python.nativeUsbDevice = dev;
+                                        break;
+                                    }
+                                }
+                            }            
+                        }         
+                        catch(e) {
+                            console.log('exception getting USB devices', e);
+                        }    
+                    }
+                    if (python.nativeUsbDevice) {
+                        python.connected();
+                    }
+                }
+                else {
+                    // No auto-reconnect so go back up and wait until connected
+                }
+            }   
+            else {
+                // Not an error, run loop again immediately (no extra delay)
+            } 
         }
-        catch(e) {
-            console.log('failed to connect', e);
-            python.updateConnectUI();
-            return;
-        }
+
+    };
+    python.runDeviceTaskQueue(); // Run asynchronously
+
+    python.connected = async function() {
+        python.updateConnectStatus('Attempting to connect by USB...');
+
+        python.usbDevice = await ParticleUsb.openNativeUsbDevice(python.nativeUsbDevice, {});
+
+        python.updateConnectStatus('Connected!');
+        setTimeout(function() {
+            python.updateConnectStatus('');
+        }, 2000);
+
+        python.usbConnected = true;
+        python.updateConnectUI(false);
+
+        python.selectDevice(python.usbDevice.id);
+
+        $('.pythonDebugLogsTextArea,.pythonOutputTextArea').val('');
 
 
+        const msg = 'Connected by USB!\n';
+        python.appendDebugLog(msg)
+        python.appendOutput(msg);
 
-    });
-    $('.pythonConnectDisconnect').on('click', async function() {
-        python.updateConnectUI(true);
+        $('.pythonConnectedUSB').prop('disabled', false);
+        python.updateSendUSB();
+        
+    }
 
-        if (python.statusTimer) {
-            clearInterval(python.statusTimer);
-            python.statusTimer = 0;
-        }
-
+    python.disconnected = async function() {
         if (python.usbDevice) {
             try {
                 python.usbDevice.close();
             }
             catch(e) {
                 console.log('failed to disconnect', e);
-            }
-            
+            }    
         }
+        python.nativeUsbDevice = null;
+
         const msg = 'Disconnected from USB. This section will update only when connected.\n';
         python.appendDebugLog(msg)
         python.appendOutput(msg)    
@@ -180,6 +260,35 @@ $(document).ready(function() {
 
         python.updateConnectUI();
 
+
+    }
+
+    $('.pythonConnectConnect').on('click', async function() {
+        python.updateConnectUI(true);
+        python.isConnecting = true;
+
+        // TODO: Also filter on device?
+        const filters = [
+            {vendorId: 0x2b04}
+        ];
+        try {
+            python.nativeUsbDevice = await navigator.usb.requestDevice({ filters: filters });
+
+            await python.connected();
+        }
+        catch(e) {
+            console.log('failed to connect', e);
+            python.updateConnectUI();
+        }
+
+        python.isConnecting = false;
+
+
+    });
+    $('.pythonConnectDisconnect').on('click', async function() {
+        python.updateConnectUI(true);
+
+        await python.disconnected();
     });
   
     apiHelper.deviceList('.pythonDeviceSelect', {
@@ -223,13 +332,20 @@ $(document).ready(function() {
     $('.pythonScriptSendUSB').on('click', async function() {
         $('.pythonScriptSendUSB').prop('disabled', true);
 
-        await python.sendControlRequestJSON({
-            op: 'run',
-            script: python.scriptCodeMirror.getValue(),
-        });
+        python.deviceTaskQueue.push({
+            reqObj: {
+                op: 'run',
+                script: python.scriptCodeMirror.getValue(),
+            },
+            json: true,
+            cb: async function(resultObj) {
+            },
+        })
 
-        $('.pythonScriptSendUSB').prop('disabled', false);
-        $('.pythonScriptTextArea').focus();
+        setTimeout(function() {
+            $('.pythonScriptSendUSB').prop('disabled', false);
+            $('.pythonScriptTextArea').focus();    
+        }, 500);
     });
 
 
