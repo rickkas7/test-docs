@@ -423,20 +423,34 @@ $(document).ready(function() {
 
     python.uploadScript = function(script, options = {}) {
         // name, data, offset
+        const partSize = 768;
 
-        for(let offset = 0; offset < script.length; offset += 512) {
-            let len = 512;
+        let hash = window.sha1.create(); // https://github.com/emn178/js-sha1
+        hash.update(script);
+        const sha1 = hash.hex();
+        
+
+        for(let offset = 0; offset < script.length; offset += partSize) {
+            let len = partSize;
             if (len > script.length - offset) {
                 len = script.length - offset;
             }
 
+            let reqObj = {
+                op: 'upload',
+                name: options.name,
+                data: script.substring(offset, len),
+                offset,
+            };
+
+            if ((offset + len) == script.length) {
+                // Last part
+                reqObj.sha1 = sha1;
+            }
+
+
             python.deviceTaskQueue.push({
-                reqObj: {
-                    op: 'upload',
-                    name: options.name,
-                    data: script.substring(offset, len),
-                    offset,
-                },
+                reqObj,
                 json: true,                
                 cb: async function(resultObj) {
                 },
