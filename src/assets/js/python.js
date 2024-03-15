@@ -78,6 +78,7 @@ $(document).ready(function() {
                 op: 'output',
             },
             json: false,
+            deleteOnDisconnect: true,
             cb: async function(s) {
                 python.appendLog(s, {output: true});
             },
@@ -89,7 +90,8 @@ $(document).ready(function() {
                 op: 'logs',
             },
             json: false,
-            cb: async function(s) {
+            deleteOnDisconnect: true,
+             cb: async function(s) {
                 python.appendLog(s, {debug: true});
             },
         });
@@ -102,6 +104,7 @@ $(document).ready(function() {
                 op: 'status',
             },
             json: true,
+            deleteOnDisconnect: true,
             cb: async function(statusObj) {
                 if (statusObj.output) {
                     python.queueOutputRequest();
@@ -120,6 +123,8 @@ $(document).ready(function() {
         while(true) {
             // Wait until USB connected
             if (!python.usbConnected) {
+                // TODO: Are there queue items to send by events?
+                
                 await python.delayMs(500);
                 continue;
             }
@@ -173,8 +178,17 @@ $(document).ready(function() {
                 // Update UI and state variables that we're no longer USB connected
                 python.disconnected();
 
-                // Empty queue
-                python.deviceTaskQueue = [];
+                if (!task.deleteOnDisconnect) {
+                    // Put task back to be processed again later
+                    python.deviceTaskQueue.unshift(task);
+                }
+
+                // Empty deletable items from queue
+                for(let ii = python.deviceTaskQueue - 1; ii >= 0; ii--) {
+                    if (python.deviceTaskQueue[ii].deleteOnDisconnect) {
+                        python.deviceTaskQueue.splice(ii, 1);
+                    }
+                }
 
                 if ($('.pythonAutoReconnect').prop('checked')) {
                     python.appendLog('Attempting automatic reconnection...\n', {debug: true, output: true});
@@ -220,30 +234,7 @@ $(document).ready(function() {
     };
     python.runDeviceTaskQueue(); // Run asynchronously
 
-    python.connected = async function(options = {}) {
-        python.updateConnectStatus('Attempting to connect by USB...');
-
-        python.usbDevice = await ParticleUsb.openNativeUsbDevice(python.nativeUsbDevice, {});
-
-        python.updateConnectStatus('Connected!');
-        setTimeout(function() {
-            python.updateConnectStatus('');
-        }, 2000);
-
-        python.usbConnected = true;
-        python.updateConnectUI(false);
-
-        python.selectDevice(python.usbDevice.id);
-
-        if (options.clearStatus) {
-            $('.pythonDebugLogsTextArea,.pythonOutputTextArea').val('');
-        }
-
-        python.appendLog('Connected by USB!\n', {debug: true, output: true});
-
-        $('.pythonConnectedUSB').prop('disabled', false);
-        python.updateSendUSB();
-     
+    python.updateScriptList = function() {
         python.deviceTaskQueue.push({
             reqObj: {
                 op: 'list',
@@ -276,19 +267,21 @@ $(document).ready(function() {
                             $(buttonElem).css('line-height', '14px');
                             $(buttonElem).css('margin-left', '10px');
                             $(buttonElem).text(options.title);
-                            $(buttonElem).on('click', options.click);
+                            $(buttonElem).on('click', function() {
+                                options.click(options);
+                            });
                             $(tdElem).append(buttonElem);
                         }
                         appendButton({
                             title: 'Run',
-                            click: function() {
+                            click: function(options) {
                                 $(options.buttonElem).prop('disabled', true);
                                 
                                 console.log('click run', entry);
                                 python.deviceTaskQueue.push({
                                     reqObj: {
                                         op: 'run',
-                                        name: options.name,
+                                        name: entry.name,
                                     },
                                     json: true,
                                     cb: async function(resultObj) {
@@ -302,8 +295,28 @@ $(document).ready(function() {
                         });
                         appendButton({
                             title: 'Delete',
-                            click: function() {
+                            click: function(options) {
+                                $(options.buttonElem).prop('disabled', true);
+
                                 console.log('click delete', entry);
+
+                                setTimeout(function() {
+                                    $(options.buttonElem).prop('disabled', false);
+                                }, 500);
+
+                                if (confirm('Delete script ' + entry.name + '?')) {
+                                    python.deviceTaskQueue.push({
+                                        reqObj: {
+                                            op: 'deleteScript',
+                                            name: entry.name,
+                                        },
+                                        json: true,
+                                        cb: async function(resultObj) {
+                                        },
+                                    });
+                            
+                                    python.updateScriptList();
+                                }
                             },
                         });
 
@@ -314,7 +327,34 @@ $(document).ready(function() {
                     $('.pythonScriptManagementList').append(trElem);
                 }
             },
-        })
+        });
+    }
+
+    python.connected = async function(options = {}) {
+        python.updateConnectStatus('Attempting to connect by USB...');
+
+        python.usbDevice = await ParticleUsb.openNativeUsbDevice(python.nativeUsbDevice, {});
+
+        python.updateConnectStatus('Connected!');
+        setTimeout(function() {
+            python.updateConnectStatus('');
+        }, 2000);
+
+        python.usbConnected = true;
+        python.updateConnectUI(false);
+
+        python.selectDevice(python.usbDevice.id);
+
+        if (options.clearStatus) {
+            $('.pythonDebugLogsTextArea,.pythonOutputTextArea').val('');
+        }
+
+        python.appendLog('Connected by USB!\n', {debug: true, output: true});
+
+        $('.pythonConnectedUSB').prop('disabled', false);
+        python.updateSendUSB();
+     
+        python.updateScriptList();
 
     }
 
@@ -397,7 +437,7 @@ $(document).ready(function() {
                     data: script.substring(offset, len),
                     offset,
                 },
-                json: true,
+                json: true,                
                 cb: async function(resultObj) {
                 },
             });
